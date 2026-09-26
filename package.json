@@ -1,0 +1,30 @@
+{
+  "name": "pgn-explorer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first PGN database explorer: fast import, search, opening explorer, move trees and Stockfish analysis.",
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/server",
+    "packages/web"
+  ],
+  "scripts": {
+    "build": "npm run build -w @pgnx/core && npm run build -w @pgnx/server && npm run build -w @pgnx/web",
+    "dev": "node scripts/dev.mjs",
+    "start": "node packages/server/dist/cli.js serve",
+    "cli": "node packages/server/dist/cli.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p packages/core --noEmit && tsc -p packages/server --noEmit && tsc -p packages/web --noEmit",
+    "bench": "node --conditions=development --import tsx bench/run.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.2"
+  }
+}

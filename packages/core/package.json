@@ -1,0 +1,19 @@
+{
+  "name": "@pgnx/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fast, dependency-free chess logic: move generation, SAN, FEN, Zobrist hashing, PGN parsing and writing, move trees.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

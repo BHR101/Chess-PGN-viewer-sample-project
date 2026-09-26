@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tsbuildinfo
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+bench/out/
+coverage/
+.DS_Store
+packages/web/public/engine/
