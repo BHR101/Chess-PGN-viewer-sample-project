@@ -11,4 +11,3 @@ data/
 bench/out/
 coverage/
 .DS_Store
-packages/web/public/engine/

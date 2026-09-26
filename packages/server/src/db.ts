@@ -6,6 +6,9 @@ export type DB = Database.Database;
 
 export const SCHEMA_VERSION = 1;
 
+/** positions.move value for "the game ended in this position". */
+export const MOVE_END = 0xffff;
+
 /** Result codes stored in games.result and positions.result. */
 export const RESULT = { UNKNOWN: 0, WHITE: 1, BLACK: 2, DRAW: 3 } as const;
 export const RESULT_TEXT = ['*', '1-0', '0-1', '1/2-1/2'];
@@ -93,15 +96,17 @@ CREATE INDEX IF NOT EXISTS games_fingerprint ON games(fingerprint);
 
 -- Position index: one row per (position, game) for the first N plies of each
 -- game. Powers the opening explorer and "find games with this position".
+-- The key order (hash, move, game_id) lets the explorer aggregate per move
+-- in index order, without sorting.
 CREATE TABLE IF NOT EXISTS positions (
   hash INTEGER NOT NULL,   -- Polyglot Zobrist hash (signed 64-bit)
+  move INTEGER NOT NULL,   -- next move key played in the game (65535 = game ended here)
   game_id INTEGER NOT NULL,
   ply INTEGER NOT NULL,    -- ply at which the game reached the position
-  move INTEGER,            -- next move key played in the game (NULL at game end)
   result INTEGER NOT NULL,
   elo INTEGER,             -- average Elo of both players (NULL if unknown)
   year INTEGER,
-  PRIMARY KEY (hash, game_id)
+  PRIMARY KEY (hash, move, game_id)
 ) WITHOUT ROWID;
 
 -- Cache for expensive explorer queries (invalidated whenever games change).

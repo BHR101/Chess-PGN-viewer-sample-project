@@ -1,6 +1,6 @@
 /** Loading, exporting, creating, updating and deleting individual games. */
 import { Position, START_FEN, decodeMoves, formatMainline, formatPgn, hashToBigInt } from '@pgnx/core';
-import { type DB, RESULT_TEXT, getMeta, invalidateCaches, setMeta } from './db.js';
+import { type DB, MOVE_END, RESULT_TEXT, getMeta, invalidateCaches, setMeta } from './db.js';
 import { GameWriter } from './importer/import.js';
 import { formatDate, processGame } from './importer/process.js';
 import { clearExplorerMemoryCache } from './explorer.js';
@@ -104,16 +104,18 @@ function deletePositions(db: DB, id: number): number {
     | undefined;
   if (!g) return 0;
   const pos = Position.fromFen(g.start_fen ?? START_FEN);
-  const del = db.prepare('DELETE FROM positions WHERE hash = ? AND game_id = ?');
+  const del = db.prepare('DELETE FROM positions WHERE hash = ? AND move = ? AND game_id = ?');
   const limit = indexPlies(db);
-  let removed = del.run(hashToBigInt(pos.hashHi, pos.hashLo), id).changes;
   const bytes = new Uint8Array(g.moves.buffer, g.moves.byteOffset, g.moves.byteLength);
   const keys = bytes.length >> 1;
-  for (let i = 0; i < keys && i < limit; i++) {
-    const m = pos.fromKey(bytes[2 * i] | (bytes[2 * i + 1] << 8));
+  let removed = 0;
+  for (let i = 0; i <= Math.min(keys, limit); i++) {
+    const key = i < keys ? bytes[2 * i] | (bytes[2 * i + 1] << 8) : MOVE_END;
+    removed += del.run(hashToBigInt(pos.hashHi, pos.hashLo), key, id).changes;
+    if (i === keys) break;
+    const m = pos.fromKey(key);
     if (m < 0) break;
     pos.play(m);
-    removed += del.run(hashToBigInt(pos.hashHi, pos.hashLo), id).changes;
   }
   return removed;
 }

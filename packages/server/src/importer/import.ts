@@ -106,7 +106,7 @@ export class GameWriter {
       // A temporary database (deleted automatically) keeps the main file compact.
       db.exec("ATTACH DATABASE '' AS stage");
       db.exec(`CREATE TABLE stage.positions_stage (
-        hash INTEGER, game_id INTEGER, ply INTEGER, move INTEGER, result INTEGER, elo INTEGER, year INTEGER)`);
+        hash INTEGER, move INTEGER, game_id INTEGER, ply INTEGER, result INTEGER, elo INTEGER, year INTEGER)`);
       this.insertPos = db.prepare('INSERT INTO stage.positions_stage VALUES (?, ?, ?, ?, ?, ?, ?)');
     } else {
       this.insertPos = db.prepare('INSERT OR IGNORE INTO positions VALUES (?, ?, ?, ?, ?, ?, ?)');
@@ -165,9 +165,13 @@ export class GameWriter {
     const gameId = Number(info.lastInsertRowid);
     const avgElo = elos.length === 2 ? Math.round((elos[0] + elos[1]) / 2) : elos.length ? elos[0] : null;
     const { hashes, next } = g;
+    // A position that repeats within a game is recorded once (first occurrence).
+    const seen = new Set<bigint>();
     for (let i = 0; i < hashes.length; i++) {
-      const mv = next[i];
-      this.positionsInserted += this.insertPos.run(hashes[i], gameId, i, mv === 0xffff ? null : mv, g.result, avgElo, g.year).changes;
+      const h = hashes[i];
+      if (seen.has(h)) continue;
+      seen.add(h);
+      this.positionsInserted += this.insertPos.run(h, next[i], gameId, i, g.result, avgElo, g.year).changes;
     }
     return gameId;
   }
@@ -180,7 +184,7 @@ export class GameWriter {
   mergeStaged(): number {
     if (!this.staged) return this.positionsInserted;
     const r = this.db
-      .prepare('INSERT OR IGNORE INTO main.positions SELECT * FROM stage.positions_stage ORDER BY hash, game_id')
+      .prepare('INSERT OR IGNORE INTO main.positions SELECT * FROM stage.positions_stage ORDER BY hash, move, game_id')
       .run();
     this.db.exec('DETACH DATABASE stage');
     return r.changes;

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Position, START_FEN, parseGame, parsePgn, scanPgn } from '@pgnx/core';
 import {
-  type DB, createGame, deleteGame, explore, getGame, importPgnFiles, openDatabase, searchGames, updateGame, dbStats,
+  type DB, createGame, deleteGame, explore, getGame, importPgnFiles, matchingIds, openDatabase, searchGames, updateGame, dbStats,
 } from '../src/index.js';
 import { SAMPLE_PGN, tempDir, writeTemp } from './helpers.js';
 
@@ -148,6 +148,25 @@ describe('editing games keeps the position index consistent', () => {
     expect(explore(db, START_FEN).total.games).toBe(before);
     expect(getGame(db, id)).toBeNull();
     expect(dbStats(db).games).toBe(6);
+  });
+
+  it('counts a position once per game even when it repeats', () => {
+    const before = explore(db, START_FEN).total.games;
+    const id = createGame(db, '[White "Rep, A"]\n[Black "Rep, B"]\n[Result "1/2-1/2"]\n\n1. Nf3 Nf6 2. Ng1 Ng8 3. e4 1/2-1/2');
+    const r = explore(db, START_FEN);
+    expect(r.total.games).toBe(before + 1);
+    // The repeated start position keeps the first continuation (Nf3), not e4.
+    expect(r.moves.find((m) => m.san === 'Nf3')?.games).toBe(1);
+    expect(deleteGame(db, id)).toBe(true);
+    expect(explore(db, START_FEN).total.games).toBe(before);
+  });
+
+  it('exports games matching a position', () => {
+    const pos = Position.start();
+    for (const m of ['e4', 'e5', 'Nf3', 'Nc6']) pos.playSan(m);
+    const ids = [...matchingIds(db, { fen: pos.fen() }, 1)].flat();
+    expect(ids.length).toBe(2);
+    expect(ids).toEqual([...ids].sort((a, b) => a - b));
   });
 
   it('rejects invalid PGN', () => {

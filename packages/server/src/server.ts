@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { ChessError } from '@pgnx/core';
 import { type DB, dbStats, openDatabase } from './db.js';
 import { EngineProcess, findEngine } from './engine.js';
-import { clearExplorerMemoryCache, explore, type ExplorerFilters } from './explorer.js';
+import { clearExplorerMemoryCache, explore, type ExplorerFilters, warmExplorerCache } from './explorer.js';
 import { GameInputError, createGame, deleteGame, gamesPgn, getGame, updateGame } from './games.js';
 import { JobManager } from './jobs.js';
 import { type GameQuery, matchingIds, searchGames, suggest } from './search.js';
@@ -286,6 +286,20 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
       reply.type('text/html').send('<h1>PGN Explorer API</h1><p>Web UI not built. Run <code>npm run build</code>.</p>'),
     );
   }
+
+  // Pre-compute explorer results for the main opening positions if the cache is cold.
+  app.addHook('onReady', async () => {
+    const cached = db.prepare('SELECT 1 FROM explorer_cache LIMIT 1').get();
+    if (!cached && db.prepare('SELECT 1 FROM games LIMIT 1').get()) {
+      setTimeout(() => {
+        try {
+          warmExplorerCache(db);
+        } catch (e) {
+          app.log.warn(e);
+        }
+      }, 100).unref();
+    }
+  });
 
   app.addHook('onClose', async () => {
     await jobs.shutdown();

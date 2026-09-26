@@ -282,9 +282,17 @@ export function searchGames(db: DB, q: GameQuery, countLimit = 100_000): SearchR
 /** Iterate over all game ids matching a query in id order (for exports), in chunks. */
 export function* matchingIds(db: DB, q: GameQuery, chunk = 1000): Generator<number[]> {
   const { where, params, joinPositions } = buildWhere(q);
-  const from = joinPositions ? 'positions p JOIN games g ON g.id = p.game_id' : 'games g';
+  if (joinPositions) {
+    // Position queries: collect the (bounded) id list once, then chunk it.
+    const ids = (
+      db.prepare(`SELECT g.id FROM positions p JOIN games g ON g.id = p.game_id WHERE ${where.join(' AND ')} ORDER BY g.id`)
+        .all(...params) as Array<{ id: number }>
+    ).map((r) => r.id);
+    for (let i = 0; i < ids.length; i += chunk) yield ids.slice(i, i + chunk);
+    return;
+  }
   const stmt = db.prepare(
-    `SELECT g.id FROM ${from} WHERE g.id > ? ${where.length ? 'AND ' + where.join(' AND ') : ''} ORDER BY g.id LIMIT ?`,
+    `SELECT g.id FROM games g WHERE g.id > ? ${where.length ? 'AND ' + where.join(' AND ') : ''} ORDER BY g.id LIMIT ?`,
   );
   let last = 0;
   for (;;) {

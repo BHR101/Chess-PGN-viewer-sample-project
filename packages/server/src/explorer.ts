@@ -1,6 +1,6 @@
 /** Opening / position explorer backed by the position index. */
 import { Position, moveKeyToUci, openingOfPosition } from '@pgnx/core';
-import { type DB, getMeta } from './db.js';
+import { type DB, MOVE_END, getMeta } from './db.js';
 import { type GameRow, toGameRow } from './search.js';
 
 export interface ExplorerFilters {
@@ -39,7 +39,7 @@ export interface ExplorerResult {
 }
 
 interface Row {
-  move: number | null;
+  move: number;
   n: number;
   w: number;
   d: number;
@@ -113,7 +113,7 @@ export function explore(db: DB, fen: string, filters: ExplorerFilters = {}, game
     total.white += r.w;
     total.draws += r.d;
     total.black += r.b;
-    if (r.move === null) {
+    if (r.move === MOVE_END) {
       ended += r.n;
       continue;
     }
