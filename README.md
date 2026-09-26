@@ -188,6 +188,11 @@ skewed opening distribution, 4% annotated):
 | Search: games reaching a position | < 1 ms |
 | Load and format one game | 0.4 ms |
 
+Real-world check: 33 issues of *The Week in Chess* (2017–18, 92 MB,
+109,614 games) import in 18 s with no errors, and 315 cross-issue duplicates
+are skipped. On a 10,980-game subset, game count, players and main-line
+length match python-chess exactly for every game.
+
 Single-thread core throughput (`npm run bench:parse`): SAN replay with hashing
 **2.1M plies/s**, PGN tokenizing 42k games/s, perft 4.3M nodes/s.
 
