@@ -1,9 +1,9 @@
 /** Smaller building blocks of the analysis view: game header, controls, FEN bar, annotation editor. */
-import { useEffect, useState } from 'react';
-import { Position, openingOfPosition } from '@pgnx/core';
+import { useEffect, useRef, useState } from 'react';
+import { type GameNode, Position, openingOfPosition } from '@pgnx/core';
 import { api } from '../api';
 import { commentText } from '../state/comments';
-import { positionOf, useGameStore } from '../state/gameStore';
+import { confirmDiscard, positionOf, useGameStore } from '../state/gameStore';
 import { navigate } from '../state/router';
 import { useSettings } from '../state/settings';
 import {
@@ -206,6 +206,10 @@ export function FenBar() {
     if (!t || t === fen) return;
     try {
       const p = Position.fromFen(t);
+      if (!confirmDiscard()) {
+        setText(fen);
+        return;
+      }
       useGameStore.getState().newGame(p.fen());
       navigate('/analysis');
     } catch (e) {
@@ -219,8 +223,11 @@ export function FenBar() {
         className="input mono"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && apply()}
-        onBlur={apply}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') apply();
+          else if (e.key === 'Escape') setText(fen);
+        }}
+        onBlur={() => setText(fen)}
         spellCheck={false}
         aria-label="FEN"
         title="FEN of the current position — paste a FEN and press Enter to set up a position"
@@ -265,11 +272,20 @@ export function AnnotationEditor() {
   useGameStore((s) => s.version);
   const { setComment, toggleNag } = useGameStore.getState();
   const [text, setText] = useState(() => splitComment(node.comment).text);
-  useEffect(() => setText(splitComment(node.comment).text), [node]);
-  const save = () => {
-    const { text: before, commands } = splitComment(node.comment);
-    if (text.trim() !== before) setComment(node, `${text.trim()} ${commands}`);
+  const textRef = useRef(text);
+  textRef.current = text;
+  const commit = (n: GameNode, value: string) => {
+    const { text: before, commands } = splitComment(n.comment);
+    if (value.trim() !== before) setComment(n, `${value.trim()} ${commands}`);
   };
+  useEffect(() => {
+    setText(splitComment(node.comment).text);
+    // Save pending text when the current move changes (e.g. a move played on the
+    // board keeps the textarea focused, so no blur happens) or on unmount.
+    return () => commit(node, textRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node]);
+  const save = () => commit(node, text);
   const textarea = (placeholder: string) => (
     <textarea className="input" rows={2} placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} onBlur={save} />
   );

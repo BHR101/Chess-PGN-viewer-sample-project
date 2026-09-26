@@ -77,9 +77,15 @@ async function main() {
           port: { type: 'string', default: process.env.PORT ?? '3000' },
           host: { type: 'string', default: process.env.HOST ?? '127.0.0.1' },
           'web-dir': { type: 'string' },
+          'allow-host': { type: 'string', multiple: true },
         },
       });
-      const { app } = await createServer({ dbPath: resolve(values.db!), webDir: values['web-dir'], host: values.host });
+      const { app } = await createServer({
+        dbPath: resolve(values.db!),
+        webDir: values['web-dir'],
+        host: values.host,
+        allowedHosts: (values['allow-host'] ?? []).map((h) => h.toLowerCase()),
+      });
       const address = await app.listen({ port: Number(values.port), host: values.host });
       console.log(`PGN Explorer running at ${address.replace('127.0.0.1', 'localhost')}  (database: ${resolve(values.db!)})`);
       const stop = async () => {
@@ -193,7 +199,7 @@ async function main() {
       console.log(`PGN Explorer
 
 Usage:
-  pgnx serve   [--db FILE] [--port 3000] [--host 127.0.0.1]
+  pgnx serve   [--db FILE] [--port 3000] [--host 127.0.0.1] [--allow-host NAME]
   pgnx import  FILE... [--db FILE] [--index-plies 60] [--no-dedupe] [--strip-annotations] [--workers N]
   pgnx export  [--db FILE] [--out FILE] [filters]
   pgnx search  [--db FILE] [filters] [--limit 20]

@@ -153,7 +153,9 @@ export class Engine {
       this.startPending();
       return;
     }
-    if (line.startsWith('info ') && this.current && this.searching && !this.pending) this.parseInfo(line);
+    // Ignore output of a search that is being stopped (new position pending, or a
+    // finished/terminal position is displayed).
+    if (line.startsWith('info ') && this.current && this.searching && !this.pending && !this.current.done) this.parseInfo(line);
   }
 
   private parseInfo(line: string) {
@@ -270,7 +272,8 @@ export class Engine {
     this.opts.multiPv = n;
     const fen = this.current?.fen;
     if (this.searching) {
-      this.pending = fen ?? null;
+      // Keep a newer position that is already waiting for the restart.
+      if (this.pending === null) this.pending = fen ?? null;
       this.transport.send('stop');
     }
     this.transport.send(`setoption name MultiPV value ${n}`);

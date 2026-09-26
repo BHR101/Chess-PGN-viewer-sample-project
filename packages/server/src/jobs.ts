@@ -117,10 +117,23 @@ export class JobManager {
     });
   }
 
-  async shutdown(): Promise<void> {
-    if (this.running) {
-      Atomics.store(this.running.cancel, 0, 1);
-      await this.running.worker.terminate();
-    }
+  /**
+   * Stop a running import: ask it to cancel (it then merges what it committed)
+   * and wait a while before terminating it. Anything left unmerged after a hard
+   * stop is recovered the next time the database is opened.
+   */
+  async shutdown(graceMs = 15_000): Promise<void> {
+    this.queue.length = 0;
+    const running = this.running;
+    if (!running) return;
+    Atomics.store(running.cancel, 0, 1);
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, graceMs);
+      running.worker.once('exit', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+    await running.worker.terminate();
   }
 }

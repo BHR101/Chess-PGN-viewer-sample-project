@@ -2,8 +2,8 @@
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
-import { createWriteStream, existsSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { createWriteStream, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { hostname, networkInterfaces, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +33,22 @@ export interface ServerOptions {
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 
+let localNameCache: { at: number; names: Set<string> } | null = null;
+
+/** This machine's host names and interface addresses (for servers bound to all interfaces). */
+function localNames(): Set<string> {
+  if (localNameCache && Date.now() - localNameCache.at < 60_000) return localNameCache.names;
+  const names = new Set<string>();
+  const h = hostname().toLowerCase();
+  names.add(h);
+  names.add(`${h}.local`);
+  for (const list of Object.values(networkInterfaces())) {
+    for (const a of list ?? []) names.add(a.family === 'IPv6' ? `[${a.address.toLowerCase()}]` : a.address);
+  }
+  localNameCache = { at: Date.now(), names };
+  return names;
+}
+
 function hostName(hostHeader: string): string {
   // Strip the port (keeping bracketed IPv6 literals intact).
   const m = /^(\[[^\]]+\]|[^:]+)(?::\d+)?$/.exec(hostHeader.trim().toLowerCase());
@@ -48,7 +64,12 @@ export function isRequestAllowed(headers: Record<string, string | string[] | und
   const host = typeof headers.host === 'string' ? headers.host : '';
   const name = hostName(host);
   const openBind = bindHost === '0.0.0.0' || bindHost === '::';
-  if (!openBind && !LOOPBACK.has(name) && name !== bindHost.toLowerCase() && !extraHosts.includes(name)) return false;
+  const known =
+    LOOPBACK.has(name) ||
+    name === bindHost.toLowerCase() ||
+    extraHosts.includes(name) ||
+    (openBind && localNames().has(name));
+  if (!known) return false;
   const origin = typeof headers.origin === 'string' ? headers.origin : undefined;
   if (origin && origin !== 'null') {
     try {
@@ -210,17 +231,24 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   app.post('/api/import', async (req, reply) => {
     const q = req.query as Record<string, unknown>;
     const name = str(q.name) ?? 'upload.pgn';
+    const body = req.body;
+    const isStream = !!body && typeof (body as NodeJS.ReadableStream).pipe === 'function';
+    if (typeof body !== 'string' && !isStream) {
+      return badRequest(reply, 'Send the PGN file as the request body (application/octet-stream)');
+    }
     const dir = mkdtempSync(join(tmpdir(), 'pgnx-upload-'));
     const file = join(dir, 'upload.pgn');
-    const body = req.body;
-    if (typeof body === 'string') {
-      await pipeline(async function* () {
-        yield body;
-      }, createWriteStream(file));
-    } else if (body && typeof (body as NodeJS.ReadableStream).pipe === 'function') {
-      await pipeline(body as NodeJS.ReadableStream, createWriteStream(file));
-    } else {
-      return badRequest(reply, 'Send the PGN file as the request body (application/octet-stream)');
+    try {
+      if (typeof body === 'string') {
+        await pipeline(async function* () {
+          yield body;
+        }, createWriteStream(file));
+      } else {
+        await pipeline(body as NodeJS.ReadableStream, createWriteStream(file));
+      }
+    } catch (e) {
+      rmSync(dir, { recursive: true, force: true });
+      throw e;
     }
     const job = jobs.submit(name, [file], {
       dedupe: bool(q.dedupe) ?? true,

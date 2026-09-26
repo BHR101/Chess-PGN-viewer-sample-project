@@ -8,7 +8,7 @@ import {
 } from './components/icons';
 import { Toasts, toast, toastError } from './components/Toasts';
 import { useEngineDriver } from './engine/useEngine';
-import { useGameStore } from './state/gameStore';
+import { confirmDiscard, useGameStore } from './state/gameStore';
 import { navigate, parseHash, useHash } from './state/router';
 import { useSettings } from './state/settings';
 
@@ -83,7 +83,11 @@ export function App() {
       }
       return;
     }
-    if (st.dirty && !confirm('Discard unsaved changes to the current game?')) return;
+    if (!confirmDiscard()) {
+      // Keep the URL in sync with the game that stays open.
+      navigate(st.gameId !== null ? `/game/${st.gameId}` : '/analysis', true);
+      return;
+    }
     api
       .game(gameId)
       .then((g) => useGameStore.getState().loadPgn(g.pgn, { gameId: g.id, ply }))
@@ -91,12 +95,25 @@ export function App() {
   }, [gameId, plyParam]);
   useEffect(() => {
     if (!fenParam) return;
+    if (!confirmDiscard()) {
+      navigate('/analysis', true);
+      return;
+    }
     try {
       useGameStore.getState().newGame(fenParam);
     } catch (e) {
       toastError(e);
     }
   }, [fenParam]);
+
+  // Warn before leaving the page with unsaved edits.
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (useGameStore.getState().dirty) e.preventDefault();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   // Global keyboard shortcuts.
   useEffect(() => {
@@ -137,9 +154,8 @@ export function App() {
   }, [route.view, dialog, settings]);
 
   const newGame = () => {
-    const st = useGameStore.getState();
-    if (st.dirty && !confirm('Discard unsaved changes to the current game?')) return;
-    st.newGame();
+    if (!confirmDiscard()) return;
+    useGameStore.getState().newGame();
     navigate('/analysis');
   };
 

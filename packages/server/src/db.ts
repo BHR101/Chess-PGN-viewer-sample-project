@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 export type DB = Database.Database;
 
@@ -135,8 +135,75 @@ export function openDatabase(path: string, opts: OpenOptions = {}): DB {
   db.pragma('temp_store = FILE');
   db.pragma('mmap_size = 1073741824');
   db.pragma('busy_timeout = 10000');
-  if (!opts.readonly) migrate(db);
+  if (!opts.readonly) {
+    migrate(db);
+    recoverStage(db);
+  }
   return db;
+}
+
+// ---------------------------------------------------------------- staged positions
+
+/**
+ * Path of the side file used to stage position rows during large imports.
+ * It carries the process id so crash recovery never touches a live import.
+ */
+export function stagePath(db: DB, pid = process.pid): string {
+  return db.memory || !db.name ? '' : `${db.name}-stage-${pid}`;
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/** Attach (creating if needed) the staging database as schema "stage". */
+export function attachStage(db: DB, path = stagePath(db)): void {
+  db.prepare('ATTACH DATABASE ? AS stage').run(path);
+  db.pragma('stage.page_size = 8192');
+  db.pragma('stage.journal_mode = OFF');
+  db.pragma('stage.synchronous = OFF');
+  db.pragma('stage.cache_size = -65536');
+  db.exec(`CREATE TABLE IF NOT EXISTS stage.positions_stage (
+    hash INTEGER, move INTEGER, game_id INTEGER, ply INTEGER, result INTEGER, elo INTEGER, year INTEGER)`);
+}
+
+/**
+ * Merge staged rows into the position index in one sorted pass (an external
+ * merge sort in SQLite, far cheaper than millions of random B-tree inserts),
+ * then detach and delete the staging file. Returns the rows added.
+ */
+export function mergeStage(db: DB, path = stagePath(db)): number {
+  const r = db
+    .prepare('INSERT OR IGNORE INTO main.positions SELECT * FROM stage.positions_stage ORDER BY hash, move, game_id')
+    .run();
+  db.exec('DETACH DATABASE stage');
+  if (path) rmSync(path, { force: true });
+  return r.changes;
+}
+
+/** Finish an import that was interrupted (crash, kill) before its positions were merged. */
+function recoverStage(db: DB): void {
+  if (db.memory || !db.name) return;
+  const prefix = `${basename(db.name)}-stage-`;
+  const dir = dirname(db.name);
+  for (const f of readdirSync(dir)) {
+    if (!f.startsWith(prefix)) continue;
+    const pid = Number(f.slice(prefix.length));
+    if (!Number.isInteger(pid) || (pid !== process.pid && processAlive(pid))) continue;
+    const path = join(dir, f);
+    attachStage(db, path);
+    const added = mergeStage(db, path);
+    const before = Number(getMeta(db, 'position_count') ?? 0);
+    setMeta(db, 'position_count', String(before + added));
+    db.exec('CREATE INDEX IF NOT EXISTS games_fingerprint ON games(fingerprint)');
+    refreshCounts(db);
+    invalidateCaches(db);
+  }
 }
 
 function migrate(db: DB): void {

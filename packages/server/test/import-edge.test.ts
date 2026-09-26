@@ -2,7 +2,8 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parseGame } from '@pgnx/core';
-import { getGame, importPgnFiles, openDatabase, searchGames } from '../src/index.js';
+import { START_FEN } from '@pgnx/core';
+import { GameWriter, explore, getGame, importPgnFiles, openDatabase, processGame, searchGames } from '../src/index.js';
 import { tempDir } from './helpers.js';
 
 let tmp: ReturnType<typeof tempDir>;
@@ -84,6 +85,30 @@ describe('importer edge cases', () => {
     expect((await importPgnFiles(dbPath, [a], { workers: 1 })).imported).toBe(1);
     const db = openDatabase(dbPath);
     expect(searchGames(db, {}).total).toBe(3);
+    db.close();
+  });
+
+  it('refuses to change the index depth of a non-empty database', async () => {
+    const dbPath = join(tmp.dir, 'depth.sqlite');
+    const f = join(tmp.dir, 'depth.pgn');
+    writeFileSync(f, '[White "A"]\n[Black "B"]\n\n1. e4 *\n');
+    await importPgnFiles(dbPath, [f], { workers: 1, indexPlies: 10 });
+    writeFileSync(f, '[White "C"]\n[Black "D"]\n\n1. d4 *\n');
+    await expect(importPgnFiles(dbPath, [f], { workers: 1, indexPlies: 20 })).rejects.toThrow(/index/);
+    expect((await importPgnFiles(dbPath, [f], { workers: 1, indexPlies: 10 })).imported).toBe(1);
+  });
+
+  it('recovers staged positions after an interrupted import', () => {
+    const dbPath = join(tmp.dir, 'crash.sqlite');
+    let db = openDatabase(dbPath);
+    const writer = new GameWriter(db, true, true);
+    const r = processGame('[White "A"]\n[Black "B"]\n\n1. e4 e5 2. Nf3 *', { indexPlies: 60 });
+    if (!r.ok) throw new Error(r.error);
+    db.transaction(() => writer.write(r.game))();
+    // Simulate a crash: the stage is never merged.
+    db.close();
+    db = openDatabase(dbPath);
+    expect(explore(db, START_FEN).total.games).toBe(1);
     db.close();
   });
 });

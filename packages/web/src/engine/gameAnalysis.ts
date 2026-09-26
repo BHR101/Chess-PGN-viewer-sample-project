@@ -47,10 +47,13 @@ function evaluate(t: { send: (c: string) => void }, fen: string, depth: number, 
   });
 }
 
+let analysisRun = 0;
+
 /** Analyse the main line of `game`. Resolves when finished or cancelled. */
 export async function analyzeGame(game: Game, opts: { backend: 'native' | 'wasm'; depth: number; threads: number }) {
   const store = useGameAnalysis;
   store.getState().cancel?.();
+  const runId = ++analysisRun;
   const nodes: GameNode[] = [game.root, ...game.mainline()];
   let cancelled = false;
   const w: { resolve: ((e: NodeEval) => void) | null; last: NodeEval | null; turn: 'w' | 'b' } = { resolve: null, last: null, turn: 'w' };
@@ -101,13 +104,14 @@ export async function analyzeGame(game: Game, opts: { backend: 'native' | 'wasm'
     } else {
       e = await evaluate(transport, node.fen, opts.depth, w);
     }
-    if (cancelled) break;
+    if (cancelled || runId !== analysisRun) break;
     const evals = new Map(store.getState().evals);
     evals.set(node.id, e);
     store.setState({ evals, done: store.getState().done + 1 });
   }
   transport.close();
-  store.setState({ running: false, cancel: null });
+  // A newer run may have started meanwhile; only the latest run clears the state.
+  if (runId === analysisRun) store.setState({ running: false, cancel: null });
 }
 
 /** Judge the move leading to `node` from the evaluations before and after it. */

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { type Job, api, uploadPgn } from '../api';
-import { useGameStore } from '../state/gameStore';
+import { confirmDiscard, useGameStore } from '../state/gameStore';
 import { navigate } from '../state/router';
 import { type BoardTheme, useSettings } from '../state/settings';
 import { IconFile, IconPlus, IconTrash, IconUpload } from './icons';
@@ -63,6 +63,7 @@ export function OpenPgnDialog({ onClose, onImport }: { onClose: () => void; onIm
   const [text, setText] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const open = (pgn: string) => {
+    if (!confirmDiscard()) return;
     try {
       const n = useGameStore.getState().loadPgn(pgn);
       navigate('/analysis');
@@ -81,6 +82,7 @@ export function OpenPgnDialog({ onClose, onImport }: { onClose: () => void; onIm
     open(await f.text());
   };
   const loadFen = () => {
+    if (!confirmDiscard()) return;
     try {
       useGameStore.getState().newGame(text.trim());
       navigate('/analysis');

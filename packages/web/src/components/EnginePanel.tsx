@@ -87,7 +87,10 @@ export function EnginePanel({ nativeAvailable }: { nativeAvailable: boolean }) {
                       <span key={i}>
                         {num && <span className="num">{num}</span>}
                         <span
-                          onClick={() => playLine(l.uci.slice(0, i + 1))}
+                          onClick={() => {
+                            setHover(null);
+                            playLine(l.uci.slice(0, i + 1));
+                          }}
                           onMouseEnter={() => i === 0 && setHover(l.uci[0])}
                           onMouseLeave={() => setHover(null)}
                           title="Play this line up to here"

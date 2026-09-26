@@ -7,6 +7,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { delimiter, join } from 'node:path';
+import { Position } from '@pgnx/core';
 
 const CANDIDATES = [
   '/usr/games/stockfish',
@@ -69,6 +70,16 @@ export function sanitizeUciCommand(raw: string): string | null {
     if (!m) return null;
     if (m[2] && !FEN_RE.test(m[2])) return null;
     if (m[3] && !MOVES_RE.test(m[3])) return null;
+    // Engines may crash on impossible positions or illegal moves: validate semantically.
+    try {
+      const pos = m[2] ? Position.fromFen(m[2]) : Position.start();
+      for (const mv of m[3]?.split(' ') ?? []) {
+        if (pos.parseUci(mv) < 0) return null;
+        pos.playUci(mv);
+      }
+    } catch {
+      return null;
+    }
     return cmd;
   }
   const opt = /^setoption name (.+?) value (.+)$/i.exec(cmd);
@@ -87,6 +98,10 @@ export class EngineProcess {
 
   constructor(path: string, private onLine: (line: string) => void, onExit: () => void) {
     this.proc = spawn(path, [], { stdio: 'pipe' });
+    // Writing to a crashed engine raises EPIPE on stdin; the exit handler deals with it.
+    this.proc.stdin.on('error', () => {
+      this.closed = true;
+    });
     this.proc.stdout.setEncoding('utf8');
     this.proc.stdout.on('data', (chunk: string) => {
       this.buffer += chunk;

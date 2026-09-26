@@ -85,6 +85,19 @@ describe('HTTP API', () => {
     expect(sel.body.match(/^\[Event /gm)?.length).toBe(2);
   });
 
+  it('handles odd query parameters gracefully', async () => {
+    for (const q of ['player=carlsen&color=white&opponent=caruana', 'sort=constructor', 'sort=toString', 'offset=1.5&limit=2.7']) {
+      const res = await server.app.inject({ url: `/api/games?${q}` });
+      expect(res.statusCode, q).toBe(200);
+    }
+    expect((await server.app.inject({ url: '/api/games?player=carlsen&color=white&opponent=caruana' })).json().total).toBe(1);
+  });
+
+  it('rejects a non-PGN import body without leaking temp files', async () => {
+    const res = await server.app.inject({ method: 'POST', url: '/api/import', payload: { not: 'pgn' } });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('suggests player names', async () => {
     const res = await server.app.inject({ url: '/api/suggest/players?q=car' });
     expect(res.json()).toEqual(['Carlsen, Magnus', 'Caruana, Fabiano']);
@@ -107,6 +120,12 @@ describe('engine command sanitizer', () => {
     expect(sanitizeUciCommand('quit')).toBeNull();
     expect(sanitizeUciCommand('position startpos moves e2e4; rm -rf /')).toBeNull();
     expect(sanitizeUciCommand('go depth 20\nsetoption name Debug Log File value x')).toBeNull();
+  });
+
+  it('rejects impossible positions and illegal moves (they can crash engines)', () => {
+    expect(sanitizeUciCommand('position fen 8/8/8/8/8/8/8/8 w - - 0 1')).toBeNull();
+    expect(sanitizeUciCommand('position startpos moves e2e5')).toBeNull();
+    expect(sanitizeUciCommand('position startpos moves e2e4 e7e5 g1f3')).toBe('position startpos moves e2e4 e7e5 g1f3');
   });
 });
 
@@ -149,9 +168,10 @@ describe('cross-site protection', () => {
     expect(isRequestAllowed({ host: 'localhost:3000', origin: 'https://evil.example' }, '127.0.0.1')).toBe(false);
     expect(isRequestAllowed({ host: 'localhost:3000', origin: 'null' }, '127.0.0.1')).toBe(false);
     expect(isRequestAllowed({ host: 'evil.example:3000' }, '127.0.0.1')).toBe(false);
-    // Explicitly exposed servers accept any host name, still same-origin only.
-    expect(isRequestAllowed({ host: 'mybox.lan:3000' }, '0.0.0.0')).toBe(true);
-    expect(isRequestAllowed({ host: 'mybox.lan:3000', origin: 'http://other.lan' }, '0.0.0.0')).toBe(false);
+    // Servers bound to all interfaces accept this machine's names/addresses and allowed hosts only.
+    expect(isRequestAllowed({ host: 'attacker.example:3000', origin: 'http://attacker.example:3000' }, '0.0.0.0')).toBe(false);
+    expect(isRequestAllowed({ host: 'mybox.lan:3000' }, '0.0.0.0', ['mybox.lan'])).toBe(true);
+    expect(isRequestAllowed({ host: 'mybox.lan:3000', origin: 'http://other.lan' }, '0.0.0.0', ['mybox.lan'])).toBe(false);
   });
 
   it('blocks a cross-site POST through the server', async () => {

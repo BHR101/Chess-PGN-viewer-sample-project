@@ -82,12 +82,14 @@ Options: `--db FILE` (or `PGNX_DB`), `--port` (`PORT`), `--host` (`HOST`,
 default `127.0.0.1` so the server is only reachable from your machine). The
 server rejects cross-origin requests and unexpected `Host` headers, so other
 websites cannot drive it (CSRF, WebSocket hijacking or DNS rebinding) while it
-runs. The engine bridge only forwards a safe subset of UCI commands.
+runs. When the server is bound to all interfaces (`--host 0.0.0.0`), it accepts this
+machine's own names and addresses plus any `--allow-host NAME`. The engine
+bridge only forwards a safe subset of UCI commands and legal positions.
 
 ## Command line
 
 ```
-pgnx serve   [--db FILE] [--port 3000] [--host 127.0.0.1]
+pgnx serve   [--db FILE] [--port 3000] [--host 127.0.0.1] [--allow-host NAME]
 pgnx import  FILE... [--db FILE] [--index-plies 60] [--no-dedupe] [--strip-annotations] [--workers N]
 pgnx export  [--db FILE] [--out FILE] [filters]
 pgnx search  [--db FILE] [filters] [--limit 20]

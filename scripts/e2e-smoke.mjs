@@ -103,6 +103,15 @@ try {
   await page.waitForFunction(() => document.querySelector('.fen-bar input')?.value.startsWith('rnbqkbnr/pppppppp/8/8/4P3'));
   step('play a move on the board');
 
+  // A comment typed and then followed by a board move must not be lost.
+  await page.click('.tab:has-text("Moves")').catch(() => {});
+  await page.fill('.annotate textarea', 'Best by test');
+  await page.mouse.click(...sq(4, 6));
+  await page.mouse.click(...sq(4, 4));
+  await page.waitForFunction(() => document.querySelector('.fen-bar input')?.value.startsWith('rnbqkbnr/pppp1ppp/8/4p3/4P3'));
+  if (!(await page.locator('.moves').innerText()).includes('Best by test')) throw new Error('comment lost after board move');
+  step('comments survive playing on');
+
   await page.keyboard.press('l');
   await page.waitForSelector('.pv-line', { timeout: 30000 });
   step('engine analysis');

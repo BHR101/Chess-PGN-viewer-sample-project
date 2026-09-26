@@ -118,11 +118,14 @@ export function buildWhere(q: GameQuery): Built {
       where.push(`(g.white_id IN ${a} OR g.black_id IN ${b})`);
     }
     if (q.opponent?.trim()) {
-      const a = playerIds(q.opponent);
-      const b = playerIds(q.opponent);
-      if (color === 'white') where.push(`g.black_id IN ${a}`);
-      else if (color === 'black') where.push(`g.white_id IN ${a}`);
-      else where.push(`(g.white_id IN ${a} OR g.black_id IN ${b})`);
+      // Each playerIds() call pushes one parameter: call it once per placeholder.
+      if (color === 'white') where.push(`g.black_id IN ${playerIds(q.opponent)}`);
+      else if (color === 'black') where.push(`g.white_id IN ${playerIds(q.opponent)}`);
+      else {
+        const a = playerIds(q.opponent);
+        const b = playerIds(q.opponent);
+        where.push(`(g.white_id IN ${a} OR g.black_id IN ${b})`);
+      }
     }
   }
   if (q.white?.trim()) where.push(`g.white_id IN ${playerIds(q.white)}`);
@@ -242,11 +245,11 @@ export function searchGames(db: DB, q: GameQuery, countLimit = 100_000): SearchR
   const { where, params, joinPositions } = buildWhere(q);
   const from = joinPositions ? 'positions p JOIN games g ON g.id = p.game_id' : 'games g';
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  const sortKey = q.sort && SORT_SQL[q.sort] ? q.sort : 'id';
+  const sortKey = q.sort && Object.hasOwn(SORT_SQL, q.sort) ? q.sort : 'id';
   const dir = q.order === 'asc' ? 'ASC' : 'DESC';
   const needsNames = ['white', 'black', 'event'].includes(sortKey);
-  const limit = Math.min(Math.max(q.limit ?? 50, 1), 1000);
-  const offset = Math.max(q.offset ?? 0, 0);
+  const limit = Math.min(Math.max(Math.trunc(q.limit ?? 50), 1), 1000);
+  const offset = Math.max(Math.trunc(q.offset ?? 0), 0);
   // Find the page of ids first (cheap, index-friendly), then join the display columns.
   const idSql = needsNames
     ? `SELECT g.id ${joinPositions ? ', p.ply' : ''} FROM ${from} ${JOINS} ${whereSql}

@@ -247,3 +247,8 @@ export function positionOf(node: GameNode): Position {
   }
   return p;
 }
+
+/** Ask before throwing away unsaved edits. Returns true if it is OK to proceed. */
+export function confirmDiscard(): boolean {
+  return !useGameStore.getState().dirty || confirm('Discard unsaved changes to the current game?');
+}

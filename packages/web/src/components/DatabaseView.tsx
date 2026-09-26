@@ -64,7 +64,8 @@ function Suggest({ kind, value, onChange, placeholder, onEnter }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
-  onEnter: () => void;
+  /** Called on Enter with the (possibly just chosen) value. */
+  onEnter: (value: string) => void;
 }) {
   const [items, setItems] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
@@ -103,9 +104,12 @@ function Suggest({ kind, value, onChange, placeholder, onEnter }: {
             setActive((a) => Math.max(-1, a - 1));
             e.preventDefault();
           } else if (e.key === 'Enter') {
-            if (active >= 0 && items[active]) onChange(items[active]);
+            // Handle submission here (with the chosen value) instead of the form's implicit submit.
+            e.preventDefault();
+            const chosen = open && active >= 0 && items[active] ? items[active] : value;
+            if (chosen !== value) onChange(chosen);
             setOpen(false);
-            setTimeout(onEnter, 0);
+            onEnter(chosen);
           } else if (e.key === 'Escape') setOpen(false);
         }}
         role="combobox"
@@ -161,7 +165,7 @@ function FilterPanel({ filters, onApply }: { filters: Filters; onApply: (f: Filt
     >
       <div className="field">
         <label>Player</label>
-        <Suggest kind="players" value={draft.player ?? ''} onChange={set('player')} placeholder="Name (part of it is enough)" onEnter={() => onApply({ ...draft })} />
+        <Suggest kind="players" value={draft.player ?? ''} onChange={set('player')} placeholder="Name (part of it is enough)" onEnter={(v) => onApply({ ...draft, player: v })} />
         <div className="row">
           <select className="select" value={draft.color ?? 'any'} onChange={(e) => set('color')(e.target.value === 'any' ? '' : e.target.value)}>
             <option value="any">as White or Black</option>
@@ -172,7 +176,7 @@ function FilterPanel({ filters, onApply }: { filters: Filters; onApply: (f: Filt
       </div>
       <div className="field">
         <label>Opponent</label>
-        <Suggest kind="players" value={draft.opponent ?? ''} onChange={set('opponent')} placeholder="Opponent name" onEnter={apply} />
+        <Suggest kind="players" value={draft.opponent ?? ''} onChange={set('opponent')} placeholder="Opponent name" onEnter={(v) => onApply({ ...draft, opponent: v })} />
       </div>
       <div className="field">
         <label>Result</label>
@@ -189,8 +193,8 @@ function FilterPanel({ filters, onApply }: { filters: Filters; onApply: (f: Filt
       </div>
       <div className="field">
         <label>Event / Site</label>
-        <Suggest kind="events" value={draft.event ?? ''} onChange={set('event')} placeholder="Event" onEnter={apply} />
-        <Suggest kind="sites" value={draft.site ?? ''} onChange={set('site')} placeholder="Site" onEnter={apply} />
+        <Suggest kind="events" value={draft.event ?? ''} onChange={set('event')} placeholder="Event" onEnter={(v) => onApply({ ...draft, event: v })} />
+        <Suggest kind="sites" value={draft.site ?? ''} onChange={set('site')} placeholder="Site" onEnter={(v) => onApply({ ...draft, site: v })} />
       </div>
       <div className="field">
         <label>Date</label>
@@ -480,7 +484,10 @@ function Preview({ row, onOpen }: { row: GameRow; onOpen: (ply?: number) => void
 // ---------------------------------------------------------------- view
 
 export function DatabaseView({ params, gameCount, dataVersion }: { params: URLSearchParams; gameCount: number; dataVersion: string }) {
-  const filters = useMemo(() => filtersFromParams(params), [params]);
+  // Key on the serialized params: the URLSearchParams object is recreated on every App render.
+  const paramKey = params.toString();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const filters = useMemo(() => filtersFromParams(params), [paramKey]);
   const query = useMemo(() => toQuery(filters), [filters]);
   const [selected, setSelected] = useState<GameRow | null>(null);
   const [stats, setStats] = useState<{ total: number; capped: boolean; ms: number } | null>(null);

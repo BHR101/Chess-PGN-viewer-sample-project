@@ -10,8 +10,11 @@ import type { Worker } from 'node:worker_threads';
 import type { Statement } from 'better-sqlite3';
 import { PgnSplitter } from '@pgnx/core';
 import {
-  type DB, createGameIndexes, dropGameIndexes, getMeta, invalidateCaches, openDatabase, refreshCounts, setMeta,
+  type DB, attachStage, createGameIndexes, dropGameIndexes, getMeta, invalidateCaches, mergeStage, openDatabase,
+  refreshCounts, setMeta,
 } from '../db.js';
+
+const ownsDbFor = (target: string | DB) => typeof target === 'string';
 import { clearExplorerMemoryCache, warmExplorerCache } from '../explorer.js';
 import { siblingModule, spawnWorker } from '../util/worker.js';
 import type { ProcessedGame, ProcessOptions } from './process.js';
@@ -106,10 +109,9 @@ export class GameWriter {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     if (staged) {
-      // A temporary database (deleted automatically) keeps the main file compact.
-      db.exec("ATTACH DATABASE '' AS stage");
-      db.exec(`CREATE TABLE stage.positions_stage (
-        hash INTEGER, move INTEGER, game_id INTEGER, ply INTEGER, result INTEGER, elo INTEGER, year INTEGER)`);
+      // Positions are staged in a side file next to the database: it keeps the
+      // main file compact and survives crashes (openDatabase merges leftovers).
+      attachStage(db);
       this.posTarget = 'INSERT INTO stage.positions_stage VALUES ';
     } else {
       this.posTarget = 'INSERT OR IGNORE INTO positions VALUES ';
@@ -210,11 +212,7 @@ export class GameWriter {
    */
   mergeStaged(): number {
     if (!this.staged) return this.positionsInserted;
-    const r = this.db
-      .prepare('INSERT OR IGNORE INTO main.positions SELECT * FROM stage.positions_stage ORDER BY hash, move, game_id')
-      .run();
-    this.db.exec('DETACH DATABASE stage');
-    return r.changes;
+    return mergeStage(this.db);
   }
 }
 
@@ -222,6 +220,8 @@ class WorkerPool {
   private workers: Worker[] = [];
   private idle: Worker[] = [];
   private waiting: Array<() => void> = [];
+  /** Set when a worker crashed; all pending and future calls then fail. */
+  private failed: Error | null = null;
 
   constructor(size: number, private onResult: (r: ParseResponse) => void, private onError: (e: Error) => void) {
     const url = siblingModule(import.meta.url, 'worker');
@@ -231,7 +231,15 @@ class WorkerPool {
         this.onResult(r);
         this.release(w);
       });
-      w.on('error', (e: Error) => this.onError(e));
+      const fail = (e: Error) => {
+        if (!this.failed) this.failed = e;
+        this.onError(e);
+        for (const wake of this.waiting.splice(0)) wake();
+      };
+      w.on('error', fail);
+      w.on('exit', (code) => {
+        if (code !== 0 && !this.closing) fail(new Error(`Parser worker exited with code ${code}`));
+      });
       this.workers.push(w);
       this.idle.push(w);
     }
@@ -243,16 +251,21 @@ class WorkerPool {
     if (next) next();
   }
 
+  private closing = false;
+
   async submit(req: ParseRequest): Promise<void> {
-    while (!this.idle.length) await new Promise<void>((r) => this.waiting.push(r));
+    while (!this.idle.length && !this.failed) await new Promise<void>((r) => this.waiting.push(r));
+    if (this.failed) throw this.failed;
     this.idle.pop()!.postMessage(req);
   }
 
   async drain(): Promise<void> {
-    while (this.idle.length < this.workers.length) await new Promise<void>((r) => this.waiting.push(r));
+    while (this.idle.length < this.workers.length && !this.failed) await new Promise<void>((r) => this.waiting.push(r));
+    if (this.failed) throw this.failed;
   }
 
   async close(): Promise<void> {
+    this.closing = true;
     await Promise.all(this.workers.map((w) => w.terminate()));
   }
 }
@@ -284,8 +297,20 @@ export async function importPgnFiles(
 ): Promise<ImportProgress> {
   const db = typeof target === 'string' ? openDatabase(target, { cacheMiB: 1024 }) : target;
   const ownsDb = typeof target === 'string';
-  const indexPlies = opts.indexPlies ?? Number(getMeta(db, 'index_plies') ?? 60);
-  if (opts.indexPlies !== undefined) setMeta(db, 'index_plies', String(opts.indexPlies));
+  const current = Number(getMeta(db, 'index_plies') ?? 60);
+  if (opts.indexPlies !== undefined && opts.indexPlies !== current) {
+    // Every game must be indexed to the same depth (deleting/updating games relies on it).
+    if (db.prepare('SELECT 1 FROM games LIMIT 1').get()) {
+      if (ownsDbFor(target)) db.close();
+      throw new Error(`This database indexes ${current} plies per game; --index-plies can only be set for a new database.`);
+    }
+    if (!Number.isInteger(opts.indexPlies) || opts.indexPlies < 0 || opts.indexPlies > 400) {
+      if (ownsDbFor(target)) db.close();
+      throw new Error('indexPlies must be an integer between 0 and 400');
+    }
+    setMeta(db, 'index_plies', String(opts.indexPlies));
+  }
+  const indexPlies = opts.indexPlies ?? current;
   const processOpts: ProcessOptions = { indexPlies, stripAnnotations: opts.stripAnnotations };
   const batchSize = opts.batchSize ?? 500;
   const nWorkers = opts.workers ?? Math.max(1, Math.min(8, availableParallelism() - 1));
@@ -368,6 +393,7 @@ export async function importPgnFiles(
 
   let seq = 0;
   let cancelled = false;
+  let failure: Error | null = null;
   try {
     for (const file of files) {
       progress.file = basename(file);
@@ -399,32 +425,37 @@ export async function importPgnFiles(
     await pool.drain();
     if (fatal) throw fatal;
     flush();
+  } catch (e) {
+    failure = e as Error;
   } finally {
     await pool.close();
   }
 
+  // Always finish what was committed, even after an error: merge staged
+  // positions, restore indexes and pragmas, refresh counters and caches.
   progress.phase = 'indexing';
   report();
-  // Let SQLite's external sorter use helper threads for the big merge.
-  db.pragma(`threads = ${Math.min(8, availableParallelism())}`);
-  let t = Date.now();
-  const added = writer.mergeStaged();
-  if (process.env.PGNX_DEBUG) console.error(`\nmerge ${Date.now() - t}ms`);
-  t = Date.now();
-  setMeta(db, 'position_count', String(beforePositions + added));
-  if (bulk) {
-    createGameIndexes(db);
-    db.exec('CREATE INDEX IF NOT EXISTS games_fingerprint ON games(fingerprint)');
-    db.pragma('synchronous = NORMAL');
+  try {
+    // Let SQLite's external sorter use helper threads for the big merge.
+    db.pragma(`threads = ${Math.min(8, availableParallelism())}`);
+    const added = writer.mergeStaged();
+    setMeta(db, 'position_count', String(beforePositions + added));
+  } finally {
+    if (bulk) {
+      createGameIndexes(db);
+      db.exec('CREATE INDEX IF NOT EXISTS games_fingerprint ON games(fingerprint)');
+      db.pragma('synchronous = NORMAL');
+    }
+    db.pragma('analysis_limit = 1000');
+    db.exec('ANALYZE');
+    refreshCounts(db);
+    invalidateCaches(db);
+    clearExplorerMemoryCache();
   }
-  if (process.env.PGNX_DEBUG) console.error(`indexes ${Date.now() - t}ms`);
-  t = Date.now();
-  db.pragma('analysis_limit = 1000');
-  db.exec('ANALYZE');
-  if (process.env.PGNX_DEBUG) console.error(`analyze ${Date.now() - t}ms`);
-  refreshCounts(db);
-  invalidateCaches(db);
-  clearExplorerMemoryCache();
+  if (failure) {
+    if (ownsDb) db.close();
+    throw failure;
+  }
   if (progress.imported > 0) warmExplorerCache(db);
   progress.phase = cancelled ? 'cancelled' : 'done';
   report();
