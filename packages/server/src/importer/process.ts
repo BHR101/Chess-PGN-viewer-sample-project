@@ -147,6 +147,10 @@ export function processGame(raw: string, opts: ProcessOptions): ProcessResult {
       if (o) opening = o;
     }
   }
+  if (played === 0 && Object.keys(h).length === 0) {
+    // Neither tags nor a single legal move: this is not a game (junk text).
+    return { ok: false, error: warning ? `Not a game: ${warning}` : 'Not a game: no tags and no moves' };
+  }
   const indexed = Math.min(played, opts.indexPlies) + 1;
   if (played < indexCount) {
     // Record the final position (game end) if it is within the indexed range.

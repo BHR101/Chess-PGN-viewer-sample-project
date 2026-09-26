@@ -27,6 +27,8 @@ export interface BoardProps {
   /** Side allowed to move pieces (defaults to side to move in fen). */
   onMove?: (from: number, to: number, promotion?: number) => void;
   arrows?: Arrow[];
+  /** Circled squares (e.g. from [%csl] comment commands). */
+  circles?: Array<{ sq: number; color: string }>;
   showCoordinates?: boolean;
   showDests?: boolean;
   animation?: boolean;
@@ -116,7 +118,7 @@ interface Shape {
 
 export function Board(props: BoardProps) {
   const {
-    fen, orientation, lastMove, check, dests, onMove, arrows = [], showCoordinates = true, showDests = true,
+    fen, orientation, lastMove, check, dests, onMove, arrows = [], circles: markCircles = [], showCoordinates = true, showDests = true,
     animation = true, theme = 'brown', onWheel, className,
   } = props;
   const ref = useRef<HTMLDivElement>(null);
@@ -284,8 +286,9 @@ export function Board(props: BoardProps) {
     ...(drawing && drawing.from !== drawing.to ? [{ from: drawing.from, to: drawing.to, color: 'var(--shape-color)', opacity: 0.6 }] : []),
   ];
   const circles = [
-    ...shapes.filter((s) => s.from === s.to).map((s) => s.from),
-    ...(drawing && drawing.from === drawing.to ? [drawing.from] : []),
+    ...markCircles,
+    ...shapes.filter((s) => s.from === s.to).map((s) => ({ sq: s.from, color: 'var(--shape-color)' })),
+    ...(drawing && drawing.from === drawing.to ? [{ sq: drawing.from, color: 'var(--shape-color)' }] : []),
   ];
 
   return (
@@ -328,9 +331,9 @@ export function Board(props: BoardProps) {
       </div>
       {(allArrows.length > 0 || circles.length > 0) && (
         <svg className="arrows" viewBox="0 0 8 8">
-          {circles.map((sq, i) => {
-            const { x, y } = sqToXY(sq);
-            return <circle key={`c${i}`} cx={x + 0.5} cy={y + 0.5} r={0.45} fill="none" stroke="var(--shape-color)" strokeWidth={0.07} opacity={0.8} />;
+          {circles.map((c, i) => {
+            const { x, y } = sqToXY(c.sq);
+            return <circle key={`c${i}`} cx={x + 0.5} cy={y + 0.5} r={0.45} fill="none" stroke={c.color} strokeWidth={0.07} opacity={0.8} />;
           })}
           {allArrows.map((a, i) => {
             const f = sqToXY(a.from);

@@ -4,8 +4,13 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { type GameNode, NAG_SYMBOLS, writePgn, Game } from '@pgnx/core';
+import { commentText, parseComment } from '../state/comments';
 import { useGameStore } from '../state/gameStore';
 import { toast } from './Toasts';
+
+function clockOf(n: GameNode): string | undefined {
+  return n.comment?.includes('[%clk') ? parseComment(n.comment).clock : undefined;
+}
 
 function nagText(nags: number[]) {
   return nags.map((n) => NAG_SYMBOLS[n] ?? `$${n}`).join('');
@@ -50,18 +55,20 @@ function InlineMove({ node, force, h }: { node: GameNode; force: boolean; h: Han
 function Line({ start, h }: { start: GameNode; h: Handlers }) {
   const parts: ReactNode[] = [];
   const render = (n: GameNode, force: boolean) => {
-    if (n.startComment) parts.push(<span key={`sc${n.id}`} className="comment">{n.startComment} </span>);
-    parts.push(<InlineMove key={n.id} node={n} force={force || !!n.startComment} h={h} />);
-    if (n.comment) parts.push(<span key={`c${n.id}`} className="comment"> {n.comment}</span>);
+    const sc = commentText(n.startComment);
+    const c = commentText(n.comment);
+    if (sc) parts.push(<span key={`sc${n.id}`} className="comment">{sc} </span>);
+    parts.push(<InlineMove key={n.id} node={n} force={force || !!sc} h={h} />);
+    if (c) parts.push(<span key={`c${n.id}`} className="comment"> {c}</span>);
     parts.push(' ');
   };
   render(start, true);
-  let force = !!start.comment;
+  let force = !!commentText(start.comment);
   let parent = start;
   while (parent.children.length) {
     const [main, ...alts] = parent.children;
     render(main, force);
-    force = !!main.comment;
+    force = !!commentText(main.comment);
     for (const alt of alts) {
       parts.push(
         <div key={`v${alt.id}`} className="variation">
@@ -89,6 +96,7 @@ function Mainline({ root, h }: { root: GameNode; h: Handlers }) {
     >
       {n.san}
       {n.nags.length > 0 && <span className="nag">{nagText(n.nags)}</span>}
+      {clockOf(n) && <span className="clock">{clockOf(n)}</span>}
     </div>
   );
   const emptyCell = (key: string, text = '…') => <div key={key} className="cell empty">{text}</div>;
@@ -113,13 +121,15 @@ function Mainline({ root, h }: { root: GameNode; h: Handlers }) {
       if (!open) open = { idx: no, white: null };
       flush(cell(main));
     }
-    const interrupt = !!main.comment || alts.length > 0 || !!main.startComment;
+    const mc = commentText(main.comment);
+    const msc = commentText(main.startComment);
+    const interrupt = !!mc || alts.length > 0 || !!msc;
     if (interrupt) {
       if (white) flush(emptyCell(`eb${main.id}`));
       rows.push(
         <div key={`i${main.id}`} className="interrupt">
-          {main.startComment && <span className="comment">{main.startComment} </span>}
-          {main.comment && <span className="comment">{main.comment}</span>}
+          {msc && <span className="comment">{msc} </span>}
+          {mc && <span className="comment">{mc}</span>}
           {alts.map((alt) => (
             <div key={alt.id} className="variation">
               <Line start={alt} h={h} />
@@ -165,7 +175,7 @@ export function MoveTree() {
   const result = game.result;
   return (
     <div className="moves" ref={ref}>
-      {game.root.comment && <div className="root-comment">{game.root.comment}</div>}
+      {commentText(game.root.comment) && <div className="root-comment">{commentText(game.root.comment)}</div>}
       {game.root.children.length === 0 ? (
         <div className="empty">
           <h3>No moves yet</h3>

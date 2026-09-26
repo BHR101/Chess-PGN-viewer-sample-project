@@ -3,6 +3,7 @@ import { FLAG_CASTLE, QUEEN, parseSquare } from '@pgnx/core';
 import { type Arrow, Board } from '../board/Board';
 import { formatScore, winningChances } from '../engine/engine';
 import { useEngineState } from '../engine/useEngine';
+import { parseComment } from '../state/comments';
 import { positionOf, useGameStore } from '../state/gameStore';
 import { useSettings } from '../state/settings';
 import { useExplorerHover } from './explorerHover';
@@ -66,6 +67,9 @@ export function BoardArea() {
   const check = pos.inCheck() ? pos.kings[pos.turn] : null;
 
   const arrows: Arrow[] = [];
+  const annotations = parseComment(node.comment);
+  for (const a of annotations.arrows) arrows.push({ from: parseSquare(a.from), to: parseSquare(a.to), color: a.color, opacity: 0.8 });
+  const circles = annotations.highlights.map((h) => ({ sq: parseSquare(h.sq), color: h.color }));
   if (hover) {
     arrows.push({ from: parseSquare(hover.slice(0, 2)), to: parseSquare(hover.slice(2, 4)), color: '#2f6fdb', opacity: 0.75 });
   }
@@ -107,6 +111,7 @@ export function BoardArea() {
         dests={dests}
         onMove={onMove}
         arrows={arrows}
+        circles={circles}
         showCoordinates={settings.showCoordinates}
         showDests={settings.showLegalMoves}
         animation={settings.animation}

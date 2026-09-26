@@ -4,7 +4,44 @@
  * components re-render.
  */
 import { create } from 'zustand';
-import { Game, type GameNode, Position, START_FEN, parsePgn, writePgn } from '@pgnx/core';
+import { Game, type GameNode, PgnSplitter, Position, START_FEN, parseGame, parsePgn, writePgn } from '@pgnx/core';
+
+/** A game from an opened PGN file; parsed lazily when selected. */
+export interface CollectionEntry {
+  label: string;
+  raw?: string;
+  game?: Game;
+}
+
+function tag(raw: string, name: string): string {
+  const m = new RegExp(`^\\[${name}\\s+"((?:[^"\\\\]|\\\\.)*)"\\s*\\]`, 'm').exec(raw);
+  return m && m[1] !== '?' ? m[1].replace(/\\(["\\])/g, '$1') : '';
+}
+
+function labelOf(white: string, black: string, result: string, event: string): string {
+  return `${white || '?'} – ${black || '?'} ${result || '*'}${event ? ` · ${event}` : ''}`;
+}
+
+/** Build a collection from PGN text. Small inputs are parsed eagerly, large ones lazily. */
+export function buildCollection(pgn: string): CollectionEntry[] {
+  if (pgn.length < 400_000) {
+    return parsePgn(pgn).map((g) => ({
+      game: g,
+      label: labelOf(g.header('White') ?? '', g.header('Black') ?? '', g.result, (g.header('Event') ?? '').replace(/^\?$/, '')),
+    }));
+  }
+  const splitter = new PgnSplitter();
+  const raws = [...splitter.push(pgn), ...splitter.finish()];
+  return raws.map((raw) => ({ raw, label: labelOf(tag(raw, 'White'), tag(raw, 'Black'), tag(raw, 'Result'), tag(raw, 'Event')) }));
+}
+
+export function entryGame(e: CollectionEntry): Game {
+  if (!e.game) {
+    e.game = parseGame(e.raw!);
+    e.raw = undefined;
+  }
+  return e.game;
+}
 
 export interface GameState {
   game: Game;
@@ -13,10 +50,13 @@ export interface GameState {
   /** Database id when the game was loaded from (or saved to) the database. */
   gameId: number | null;
   dirty: boolean;
-  /** Other games from a pasted/opened PGN (for quick switching). */
-  collection: Game[];
+  /** Games from a pasted/opened PGN (for quick switching). */
+  collection: CollectionEntry[];
+  collectionIndex: number;
 
-  loadGame(game: Game, opts?: { gameId?: number | null; ply?: number; collection?: Game[] }): void;
+  loadGame(game: Game, opts?: { gameId?: number | null; ply?: number }): void;
+  /** Switch to another game of the opened collection. */
+  selectFromCollection(index: number): void;
   loadPgn(pgn: string, opts?: { gameId?: number | null; ply?: number }): number;
   newGame(fen?: string): void;
   goTo(node: GameNode): void;
@@ -63,29 +103,31 @@ export const useGameStore = create<GameState>((set, get) => {
     gameId: null,
     dirty: false,
     collection: [],
+    collectionIndex: 0,
 
     loadGame(game, opts = {}) {
       const node = opts.ply !== undefined ? nodeAtPly(game, opts.ply) : game.root;
-      set((s) => ({
-        game,
-        node,
-        gameId: opts.gameId ?? null,
-        dirty: false,
-        version: s.version + 1,
-        collection: opts.collection ?? s.collection,
-      }));
+      set((s) => ({ game, node, gameId: opts.gameId ?? null, dirty: false, version: s.version + 1 }));
+    },
+
+    selectFromCollection(index) {
+      const entry = get().collection[index];
+      if (!entry) return;
+      get().loadGame(entryGame(entry));
+      set({ collectionIndex: index });
     },
 
     loadPgn(pgn, opts = {}) {
-      const games = parsePgn(pgn);
-      if (!games.length) throw new Error('No game found in the PGN text');
-      get().loadGame(games[0], { ...opts, collection: games.length > 1 ? games : [] });
-      return games.length;
+      const entries = buildCollection(pgn);
+      if (!entries.length) throw new Error('No game found in the PGN text');
+      set({ collection: entries.length > 1 ? entries : [], collectionIndex: 0 });
+      get().loadGame(entryGame(entries[0]), opts);
+      return entries.length;
     },
 
     newGame(fen = START_FEN) {
       const g = new Game(Position.fromFen(fen).fen());
-      set((s) => ({ game: g, node: g.root, gameId: null, dirty: false, version: s.version + 1, collection: [] }));
+      set((s) => ({ game: g, node: g.root, gameId: null, dirty: false, version: s.version + 1, collection: [], collectionIndex: 0 }));
     },
 
     goTo(node) {

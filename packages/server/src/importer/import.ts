@@ -7,6 +7,7 @@ import { createReadStream, statSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { basename } from 'node:path';
 import type { Worker } from 'node:worker_threads';
+import type { Statement } from 'better-sqlite3';
 import { PgnSplitter } from '@pgnx/core';
 import {
   type DB, createGameIndexes, dropGameIndexes, getMeta, invalidateCaches, openDatabase, refreshCounts, setMeta,
@@ -80,7 +81,9 @@ export class GameWriter {
   private sites: Lookup;
   private openings = new Map<string, number>();
   private insertGame;
-  private insertPos;
+  private posTarget: string;
+  private posStatements = new Map<number, Statement>();
+  private posParams: unknown[] = [];
   private findDup;
   private insertOpening;
   positionsInserted = 0;
@@ -107,11 +110,20 @@ export class GameWriter {
       db.exec("ATTACH DATABASE '' AS stage");
       db.exec(`CREATE TABLE stage.positions_stage (
         hash INTEGER, move INTEGER, game_id INTEGER, ply INTEGER, result INTEGER, elo INTEGER, year INTEGER)`);
-      this.insertPos = db.prepare('INSERT INTO stage.positions_stage VALUES (?, ?, ?, ?, ?, ?, ?)');
+      this.posTarget = 'INSERT INTO stage.positions_stage VALUES ';
     } else {
-      this.insertPos = db.prepare('INSERT OR IGNORE INTO positions VALUES (?, ?, ?, ?, ?, ?, ?)');
+      this.posTarget = 'INSERT OR IGNORE INTO positions VALUES ';
     }
     this.findDup = db.prepare('SELECT id FROM games WHERE fingerprint = ? LIMIT 1');
+  }
+
+  private posInsert(rows: number): Statement {
+    let st = this.posStatements.get(rows);
+    if (!st) {
+      st = this.db.prepare(this.posTarget + new Array(rows).fill('(?, ?, ?, ?, ?, ?, ?)').join(', '));
+      this.posStatements.set(rows, st);
+    }
+    return st;
   }
 
   private openingId(o: { eco: string; name: string } | null): number | null {
@@ -167,11 +179,26 @@ export class GameWriter {
     const { hashes, next } = g;
     // A position that repeats within a game is recorded once (first occurrence).
     const seen = new Set<bigint>();
+    const params = this.posParams;
+    let rows = 0;
     for (let i = 0; i < hashes.length; i++) {
       const h = hashes[i];
       if (seen.has(h)) continue;
       seen.add(h);
-      this.positionsInserted += this.insertPos.run(h, next[i], gameId, i, g.result, avgElo, g.year).changes;
+      const o = rows * 7;
+      params[o] = h;
+      params[o + 1] = next[i];
+      params[o + 2] = gameId;
+      params[o + 3] = i;
+      params[o + 4] = g.result;
+      params[o + 5] = avgElo;
+      params[o + 6] = g.year;
+      rows++;
+    }
+    // One multi-row INSERT per game: far fewer statement executions.
+    if (rows) {
+      params.length = rows * 7;
+      this.positionsInserted += this.posInsert(rows).run(params).changes;
     }
     return gameId;
   }
@@ -378,15 +405,23 @@ export async function importPgnFiles(
 
   progress.phase = 'indexing';
   report();
+  // Let SQLite's external sorter use helper threads for the big merge.
+  db.pragma(`threads = ${Math.min(8, availableParallelism())}`);
+  let t = Date.now();
   const added = writer.mergeStaged();
+  if (process.env.PGNX_DEBUG) console.error(`\nmerge ${Date.now() - t}ms`);
+  t = Date.now();
   setMeta(db, 'position_count', String(beforePositions + added));
   if (bulk) {
     createGameIndexes(db);
     db.exec('CREATE INDEX IF NOT EXISTS games_fingerprint ON games(fingerprint)');
     db.pragma('synchronous = NORMAL');
   }
+  if (process.env.PGNX_DEBUG) console.error(`indexes ${Date.now() - t}ms`);
+  t = Date.now();
   db.pragma('analysis_limit = 1000');
   db.exec('ANALYZE');
+  if (process.env.PGNX_DEBUG) console.error(`analyze ${Date.now() - t}ms`);
   refreshCounts(db);
   invalidateCaches(db);
   clearExplorerMemoryCache();

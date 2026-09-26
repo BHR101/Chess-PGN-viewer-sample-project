@@ -73,7 +73,7 @@ export function OpenPgnDialog({ onClose, onImport }: { onClose: () => void; onIm
     }
   };
   const openFile = async (f: File) => {
-    if (f.size > 20 * 1024 * 1024) {
+    if (f.size > 50 * 1024 * 1024) {
       toast('Large file: import it into the database instead for fast searching.', 'info', 6000);
       onImport();
       return;

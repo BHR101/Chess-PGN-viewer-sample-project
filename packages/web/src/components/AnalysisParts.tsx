@@ -42,6 +42,7 @@ export function GameInfo({ onEditHeaders }: { onEditHeaders: () => void }) {
   const gameId = useGameStore((s) => s.gameId);
   const dirty = useGameStore((s) => s.dirty);
   const collection = useGameStore((s) => s.collection);
+  const collectionIndex = useGameStore((s) => s.collectionIndex);
   const opening = useOpening();
   const h = (k: string) => {
     const v = game.headers.get(k);
@@ -115,13 +116,16 @@ export function GameInfo({ onEditHeaders }: { onEditHeaders: () => void }) {
       {collection.length > 1 && (
         <select
           className="select"
-          value={collection.indexOf(game)}
-          onChange={(e) => useGameStore.getState().loadGame(collection[+e.target.value], { collection })}
+          value={collectionIndex}
+          onChange={(e) => {
+            const st = useGameStore.getState();
+            if (st.dirty && !confirm('Discard unsaved changes to the current game?')) return;
+            st.selectFromCollection(+e.target.value);
+          }}
         >
-          {collection.map((g, i) => (
+          {collection.slice(0, 5000).map((c, i) => (
             <option key={i} value={i}>
-              {i + 1}. {g.header('White')} – {g.header('Black')} {g.result}
-              {g.header('Event') && g.header('Event') !== '?' ? ` · ${g.header('Event')}` : ''}
+              {i + 1}. {c.label}
             </option>
           ))}
         </select>

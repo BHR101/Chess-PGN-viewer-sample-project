@@ -228,9 +228,9 @@ kbd {
   overflow: hidden;
 }
 .analysis.three { grid-template-columns: minmax(300px, auto) minmax(330px, 1fr) minmax(330px, 1fr); }
-.board-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; }
-.board-wrap { display: flex; gap: 8px; width: min(calc(100vh - var(--header-h) - 150px), 72vw); max-width: 100%; }
-.analysis.three .board-wrap { width: min(calc(100vh - var(--header-h) - 150px), 46vw); }
+.board-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
+.board-wrap { display: flex; gap: 8px; width: min(calc(100vh - var(--header-h) - 190px), 72vw); max-width: 100%; flex: none; }
+.analysis.three .board-wrap { width: min(calc(100vh - var(--header-h) - 190px), 46vw); }
 .board-wrap .board { flex: 1; }
 .side-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
 .panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
@@ -305,6 +305,8 @@ kbd {
 .moves .inline-move .num { color: var(--text-faint); margin-right: 2px; }
 .moves .inline-move.current .num { color: inherit; opacity: 0.8; }
 .moves .nag { color: var(--accent); font-weight: 600; margin-left: 1px; }
+.moves .clock { margin-left: auto; font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.moves .cell.current .clock { color: var(--current-text); opacity: 0.8; }
 .moves .result-row { padding: 8px 12px; text-align: center; font-weight: 600; color: var(--text-muted); }
 .moves .root-comment { padding: 6px 12px; color: var(--text-muted); font-size: 13px; }
 

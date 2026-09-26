@@ -66,3 +66,36 @@ describe('board piece matching', () => {
     expect(c2.find((p) => p.sq === 5)!.id).toBe(c1.find((p) => p.sq === 7)!.id);
   });
 });
+
+import { parseComment } from '../src/state/comments';
+
+describe('comment commands', () => {
+  it('extracts clocks, evals, arrows and highlights', () => {
+    const c = parseComment('Nice move [%clk 0:03:21] [%eval 0.35] [%cal Ge2e4,Rd7d5] [%csl Yd4]');
+    expect(c.text).toBe('Nice move');
+    expect(c.clock).toBe('03:21');
+    expect(c.eval).toBe('0.35');
+    expect(c.arrows).toEqual([
+      { color: '#15781b', from: 'e2', to: 'e4' },
+      { color: '#882020', from: 'd7', to: 'd5' },
+    ]);
+    expect(c.highlights).toEqual([{ color: '#e68f00', sq: 'd4' }]);
+    expect(parseComment('[%clk 1:00:00]').text).toBe('');
+  });
+});
+
+import { buildCollection, entryGame } from '../src/state/gameStore';
+
+describe('PGN collections', () => {
+  it('parses large inputs lazily with header labels', () => {
+    const one = (i: number) => `[Event "Ev \\"${i}\\""]\n[White "W${i}"]\n[Black "B${i}"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 {${'x'.repeat(200)}} Nc6 1-0\n\n`;
+    const text = Array.from({ length: 2000 }, (_, i) => one(i)).join('');
+    const entries = buildCollection(text);
+    expect(entries.length).toBe(2000);
+    expect(entries[7].game).toBeUndefined();
+    expect(entries[7].label).toBe('W7 – B7 1-0 · Ev "7"');
+    expect(entryGame(entries[7]).mainline().length).toBe(4);
+    const small = buildCollection(one(1) + one(2));
+    expect(small[1].game?.header('White')).toBe('W2');
+  });
+});

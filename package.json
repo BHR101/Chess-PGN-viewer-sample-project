@@ -17,7 +17,10 @@
     "test": "vitest run",
     "test:e2e": "node scripts/e2e-smoke.mjs",
     "typecheck": "tsc -p packages/core --noEmit && tsc -p packages/server --noEmit && tsc -p packages/web --noEmit",
-    "bench": "node --conditions=development --import tsx bench/run.ts"
+    "bench:generate": "node --conditions=development --import tsx bench/gen-pgn.ts",
+    "bench:parse": "node --conditions=development --import tsx bench/parse.ts",
+    "bench:import": "node --conditions=development --import tsx bench/import.ts",
+    "bench:queries": "node --conditions=development --import tsx bench/queries.ts"
   },
   "engines": {
     "node": ">=20"
