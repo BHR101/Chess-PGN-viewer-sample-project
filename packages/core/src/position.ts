@@ -145,6 +145,13 @@ export class Position {
     const halfmove = parts.length > 4 ? parseInt(parts[4], 10) : 0;
     const fullmove = parts.length > 5 ? parseInt(parts[5], 10) : 1;
 
+    // Validate on a scratch position so a failure leaves this one untouched.
+    const probe = new Position();
+    probe.board = board;
+    probe.kings = kings;
+    if (probe.isAttacked(kings[turn ^ 1], turn)) {
+      throw new ChessError(`Invalid FEN: side not to move is in check: ${fen}`);
+    }
     this.board = board;
     this.turn = turn;
     this.castling = castling;
@@ -153,9 +160,6 @@ export class Position {
     this.fullmove = Number.isFinite(fullmove) && fullmove >= 1 ? fullmove : 1;
     this.kings = kings;
     this.undoTop = 0;
-    if (this.isAttacked(kings[turn ^ 1], turn)) {
-      throw new ChessError(`Invalid FEN: side not to move is in check: ${fen}`);
-    }
     this.computeHash();
   }
 
@@ -733,7 +737,7 @@ export class Position {
       if (s === 'O-O-O' || s === '0-0-0' || s === 'OOO') return this.parseCastle(false);
       return -1;
     }
-    if (s === '--' || s === 'Z0' || s === '@@') return NULL_MOVE;
+    if (s === '--' || s === 'Z0' || s === '@@' || s === '0000') return this.inCheck() ? -1 : NULL_MOVE;
 
     let type = PAWN;
     let i = 0;
@@ -775,7 +779,7 @@ export class Position {
       if (!p || p >> 3 !== this.turn) return -1;
       const pt = p & 7;
       if (pt === KING && Math.abs(to - from) === 2 && (from === 4 || from === 60)) {
-        return this.parseCastle(to > from);
+        return promo ? -1 : this.parseCastle(to > from);
       }
       if (pt !== PAWN) type = pt;
     }
@@ -787,15 +791,20 @@ export class Position {
       const from = buf[k];
       if (disF >= 0 && (from & 7) !== disF) continue;
       if (disR >= 0 && from >> 3 !== disR) continue;
+      // A pawn capture must name the file it comes from ("exd5", not "d5").
+      if (type === PAWN && (from & 7) !== toF && disF < 0) continue;
       let pr = 0;
-      if (type === PAWN && toR === promoRank) pr = promo || QUEEN;
-      else if (promo) continue;
+      if (type === PAWN && toR === promoRank) {
+        if (!promo) continue; // the promotion piece must be given
+        pr = promo;
+      } else if (promo) continue;
       const m = this.encode(from, to, pr);
       if (!this.isLegal(m)) continue;
       if (found >= 0) return -1; // ambiguous
       found = m;
     }
-    if (found < 0 && s[0] === 'b') return this.retryAsBishop(input);
+    // "bc4" may be a bishop move written in lowercase, but never coordinate notation ("b1e2").
+    if (found < 0 && s[0] === 'b' && !(disF >= 0 && disR >= 0)) return this.retryAsBishop(input);
     return found;
   }
 
@@ -829,7 +838,7 @@ export class Position {
     const t = this.board[to];
     if (t && t >> 3 === this.turn) return -1;
     const m = this.encode(from, to, (key >> 12) & 7);
-    if (m & FLAG_CASTLE) return this.parseCastle(to > from);
+    if (m & FLAG_CASTLE) return (key >> 12) & 7 ? -1 : this.parseCastle(to > from);
     return this.isPseudoLegal(m) && this.isLegal(m) ? m : -1;
   }
 

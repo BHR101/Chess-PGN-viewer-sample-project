@@ -23,6 +23,15 @@ export interface PgnVisitor {
 
 const SUFFIX_NAGS: Record<string, number> = { '!': 1, '?': 2, '!!': 3, '??': 4, '!?': 5, '?!': 6 };
 
+/** Evaluation symbols sometimes written as text instead of $NAGs. */
+const SYMBOL_NAGS: Record<string, number> = {
+  '=': 10, '∞': 13, '+=': 14, '⩲': 14, '=+': 15, '⩱': 15, '+/-': 16, '±': 16, '-/+': 17, '∓': 17,
+  '+-': 18, '-+': 19, 'N': 146, '□': 7,
+};
+
+/** Loose shape of a move token (SAN, LAN, UCI, castling or null move). */
+const MOVE_TOKEN = /^(?:[PNBRQK]?[a-h]?[1-8]?[x:-]?[a-h][1-8](?:=?[NBRQnbrq])?|[a-h][1-8][a-h][1-8][nbrq]?|[O0]-?[O0](?:-?[O0])?|--|Z0|@@|0000)[+#]*(?:e\.p\.)?$/;
+
 export const NAG_SYMBOLS: Record<number, string> = {
   1: '!', 2: '?', 3: '!!', 4: '??', 5: '!?', 6: '?!', 7: '□', 10: '=', 13: '∞', 14: '⩲', 15: '⩱',
   16: '±', 17: '∓', 18: '+−', 19: '−+', 22: '⨀', 23: '⨀', 32: '⟳', 33: '⟳', 36: '→', 37: '→',
@@ -50,6 +59,7 @@ export function walkPgn(text: string, v: PgnVisitor): void {
   let depth = 0;
   let lineStart = true;
 
+  let resultSeen = false;
   const endGame = () => {
     while (depth > 0) {
       v.endVariation();
@@ -58,6 +68,13 @@ export function walkPgn(text: string, v: PgnVisitor): void {
     v.endGame();
     inGame = false;
     inMovetext = false;
+    resultSeen = false;
+  };
+  const startNextGame = () => {
+    endGame();
+    v.beginGame();
+    inGame = true;
+    inMovetext = true;
   };
   const ensureGame = () => {
     if (!inGame) {
@@ -202,9 +219,17 @@ export function walkPgn(text: string, v: PgnVisitor): void {
 
     if (RESULTS.has(tok) || tok === '½-½' || tok === '1/2' || tok === '0.5-0.5') {
       if (depth === 0) {
+        if (resultSeen) startNextGame();
         v.result(tok === '*' || tok === '1-0' || tok === '0-1' ? tok : '1/2-1/2');
-        endGame();
+        // The game ends at the next tag section or move; comments/NAGs that
+        // follow the result still belong to it.
+        resultSeen = true;
       }
+      continue;
+    }
+    if (tok === '0000') {
+      if (resultSeen) startNextGame();
+      v.move('--');
       continue;
     }
     // Strip a leading move number ("12.", "12...", "12.e4").
@@ -227,8 +252,8 @@ export function walkPgn(text: string, v: PgnVisitor): void {
       tok = tok.slice(k);
       if (!tok) continue;
     }
-    // Standalone suffix annotations like "!" or "?!".
-    const suffix = SUFFIX_NAGS[tok];
+    // Standalone suffix annotations like "!" or "?!", and text evaluation symbols.
+    const suffix = SUFFIX_NAGS[tok] ?? SYMBOL_NAGS[tok];
     if (suffix) {
       v.nag(suffix);
       continue;
@@ -240,15 +265,14 @@ export function walkPgn(text: string, v: PgnVisitor): void {
       if (d === 33 || d === 63) end--;
       else break;
     }
-    if (end < tok.length) {
-      const glyph = tok.slice(end);
-      tok = tok.slice(0, end);
-      if (tok) v.move(tok);
-      const nag = SUFFIX_NAGS[glyph];
-      if (nag) v.nag(nag);
-      continue;
-    }
-    if (tok) v.move(tok);
+    const glyph = end < tok.length ? tok.slice(end) : '';
+    tok = tok.slice(0, end);
+    // Anything that cannot be a move (stray text like "e.p." or "N") is ignored.
+    if (!tok || !MOVE_TOKEN.test(tok)) continue;
+    if (resultSeen) startNextGame();
+    v.move(tok);
+    const nag = SUFFIX_NAGS[glyph];
+    if (nag) v.nag(nag);
   }
   if (inGame) endGame();
 }
@@ -323,7 +347,9 @@ class TreeBuilder implements PgnVisitor {
       this.skip = 1;
       return;
     }
-    const existing = this.node.children.find((c) => c.move === m);
+    // Duplicate siblings are kept as written (like python-chess): merging a
+    // variation into the main move would graft its continuation onto the main line.
+    const existing: GameNode | undefined = undefined;
     const pos = this.pos;
     const san2 = pos.san(m);
     pos.play(m);
@@ -432,8 +458,23 @@ function cleanComment(c: string): string {
 class LineWriter {
   lines: string[] = [];
   private cur = '';
+  private openParen = false;
   constructor(private max: number) {}
+  /** Start a variation: "(" is glued to the next token. */
+  open(): void {
+    this.openParen = true;
+  }
+  /** End a variation: ")" is glued to the previous token. */
+  close(): void {
+    if (this.cur) this.cur += ')';
+    else if (this.lines.length) this.lines[this.lines.length - 1] += ')';
+    else this.cur = ')';
+  }
   token(t: string): void {
+    if (this.openParen) {
+      t = '(' + t;
+      this.openParen = false;
+    }
     if (!this.cur) {
       this.cur = t;
     } else if (this.max > 0 && this.cur.length + 1 + t.length > this.max) {
@@ -496,10 +537,10 @@ export function writeMovetext(game: Game, opts: WriteOptions = {}): string {
       if (withVariations) {
         for (let k = 1; k < parent.children.length; k++) {
           const alt = parent.children[k];
-          w.token('(');
+          w.open();
           writeMove(alt, true);
           walk(alt, withComments && !!alt.comment);
-          w.token(')');
+          w.close();
           forceNext = true;
         }
       }
@@ -508,7 +549,7 @@ export function writeMovetext(game: Game, opts: WriteOptions = {}): string {
   };
   walk(game.root, true);
   w.token(game.result);
-  return w.finish().replace(/\( /g, '(').replace(/ \)/g, ')');
+  return w.finish();
 }
 
 /**
@@ -692,7 +733,7 @@ export class PgnSplitter {
         continue;
       }
       const wasLineStart = atLineStart;
-      if (c !== 32 && c !== 9 && c !== 13) atLineStart = false;
+      if (c !== 32 && c !== 9 && c !== 13 && c !== 0xfeff) atLineStart = false;
       if (inComment) {
         if (c === 125) inComment = false;
         continue;
