@@ -1,0 +1,33 @@
+{
+  "name": "@pgnx/server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PGN Explorer backend: SQLite game database, importer, search, opening explorer, engine bridge and CLI.",
+  "type": "module",
+  "bin": {
+    "pgnx": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --conditions=development --import tsx --watch src/cli.ts serve"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.5",
+    "@fastify/websocket": "^11.3.1",
+    "@pgnx/core": "0.1.0",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.12.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/ws": "^8.18.1"
+  }
+}

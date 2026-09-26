@@ -511,6 +511,32 @@ export function writeMovetext(game: Game, opts: WriteOptions = {}): string {
   return w.finish().replace(/\( /g, '(').replace(/ \)/g, ')');
 }
 
+/**
+ * Format a bare main line (no tree) as movetext. Much cheaper than building a
+ * Game when exporting large numbers of unannotated games.
+ */
+export function formatMainline(start: Position, moves: ArrayLike<number>, result: string, maxLineLength = 80): string {
+  const w = new LineWriter(maxLineLength);
+  const pos = start;
+  let ply = (pos.fullmove - 1) * 2 + pos.turn;
+  for (let i = 0; i < moves.length; i++) {
+    if (ply % 2 === 0) w.token(`${ply / 2 + 1}.`);
+    else if (i === 0) w.token(`${(ply - 1) / 2 + 1}...`);
+    w.token(pos.san(moves[i]));
+    pos.play(moves[i]);
+    ply++;
+  }
+  w.token(result);
+  return w.finish();
+}
+
+/** Serialize headers (in the given order) followed by movetext into a PGN game. */
+export function formatPgn(headers: Iterable<[string, string]>, movetext: string): string {
+  let s = '';
+  for (const [k, v] of headers) s += `[${k} "${escapeTag(v)}"]\n`;
+  return `${s}\n${movetext}\n`;
+}
+
 /** Serialize a game to PGN (headers + movetext). */
 export function writePgn(game: Game, opts: WriteOptions = {}): string {
   let s = '';

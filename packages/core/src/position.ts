@@ -816,6 +816,39 @@ export class Position {
     return -1;
   }
 
+  /**
+   * Turn a flag-free move key (from | to << 6 | promo << 12) into a full legal
+   * move, or -1 if it is not legal here. Key 0 is the null move.
+   */
+  fromKey(key: number): number {
+    if (key === NULL_MOVE) return this.inCheck() ? -1 : NULL_MOVE;
+    const from = key & 63;
+    const to = (key >> 6) & 63;
+    const p = this.board[from];
+    if (!p || p >> 3 !== this.turn) return -1;
+    const t = this.board[to];
+    if (t && t >> 3 === this.turn) return -1;
+    const m = this.encode(from, to, (key >> 12) & 7);
+    if (m & FLAG_CASTLE) return this.parseCastle(to > from);
+    return this.isPseudoLegal(m) && this.isLegal(m) ? m : -1;
+  }
+
+  /** Cheap pseudo-legality check for a move built by encode(). */
+  private isPseudoLegal(m: number): boolean {
+    const from = m & 63;
+    const to = (m >> 6) & 63;
+    const type = this.board[from] & 7;
+    const buf = this.sanBuf;
+    const n = this.candidatesTo(type, to, buf);
+    let ok = false;
+    for (let i = 0; i < n; i++) if (buf[i] === from) ok = true;
+    if (!ok) return false;
+    const promo = (m >> 12) & 7;
+    const promoRank = this.turn === WHITE ? 7 : 0;
+    if (type === PAWN && to >> 3 === promoRank) return promo >= KNIGHT && promo <= QUEEN;
+    return promo === 0;
+  }
+
   /** Parse a UCI move ("e2e4", "e7e8q", "e1g1") into a legal move or -1. */
   parseUci(uci: string): number {
     if (uci === '0000') return NULL_MOVE;
@@ -825,11 +858,7 @@ export class Position {
     if (from < 0 || to < 0) return -1;
     const promo = uci.length === 5 ? 'nbrq'.indexOf(uci[4].toLowerCase()) + 2 : 0;
     if (uci.length === 5 && promo < 2) return -1;
-    const legal = this.legalMoves();
-    for (const m of legal) {
-      if ((m & 63) === from && ((m >> 6) & 63) === to && ((m >> 12) & 7) === promo) return m;
-    }
-    return -1;
+    return this.fromKey(from | (to << 6) | (promo << 12));
   }
 
   /** Parse and play a SAN move; throws on illegal moves. Returns the move. */
