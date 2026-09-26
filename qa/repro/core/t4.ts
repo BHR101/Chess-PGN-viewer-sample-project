@@ -1,0 +1,11 @@
+import { parseGame, writePgn, Position, encodeMoves, decodeMoves, openingOfPosition, classifyFens } from './lib.ts';
+const cg = parseGame('[SetUp "1"]\n[FEN "r3k2r/1P6/8/2pP4/8/8/8/R3K2R w KQkq c6 0 1"]\n\n1. dxc6 Kd8 2. bxa8=N Kc8 3. O-O Kb8 4. c7+ Kxa8 5. c8=R+ Ka7 6. -- Kb7 7. Rc1 h5 8. O-O-O *');
+console.log('codec game', cg.mainline().map(n=>n.san).join(' '), cg.errors);
+const ms = cg.mainline().map(n => n.move);
+const dec = decodeMoves(encodeMoves(ms), Position.fromFen(cg.startFen));
+console.log('codec rt', JSON.stringify(dec) === JSON.stringify(ms));
+const cg2 = parseGame('1. e4 d5 2. e5 f5 3. exf6 Nc6 4. fxg7 Kf7 5. gxh8=Q Qd6 6. Qxg8+ Kxg8 7. Ke2 Be6 8. Kf3 O-O-O *');
+const ms2 = cg2.mainline().map(n => n.move); console.log(cg2.errors, JSON.stringify(decodeMoves(encodeMoves(ms2), Position.start())) === JSON.stringify(ms2));
+const a = parseGame('1. d4 Nf6 2. c4 e6 *'); const b = parseGame('1. c4 e6 2. d4 Nf6 *');
+console.log(openingOfPosition(Position.fromFen(a.end().fen)), openingOfPosition(Position.fromFen(b.end().fen)), a.end().fen === b.end().fen);
+const p = Position.start(); for (const s of ['d4','Nf6','c4','e6']) p.playSan(s); console.log('inc', openingOfPosition(p));

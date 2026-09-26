@@ -1,0 +1,64 @@
+const { open, shot, check, fen, drag, key } = require('./h.cjs');
+(async () => {
+  const { browser, page, errors } = await open('/#/database');
+  page.on('dialog', (d) => d.accept());
+  await page.waitForTimeout(800);
+  const form = page.locator('form.filters');
+  await form.getByPlaceholder('Name (part of it is enough)').fill('Carlsen');
+  await page.waitForTimeout(600);
+  const sugg = await page.locator('[role=listbox], .suggest-list, .suggestions').allInnerTexts().catch(() => []);
+  console.log('suggestions:', sugg.join(' | ').slice(0, 200));
+  await page.keyboard.press('Escape');
+  await form.locator('select').first().selectOption('black');
+  await form.getByPlaceholder('From (YYYY[.MM.DD])').fill('2019');
+  await form.getByPlaceholder('To', { exact: true }).fill('2025');
+  await form.locator('select').nth(1).selectOption('win');
+  await form.locator('button[type=submit], button:has-text("Search")').first().click();
+  await page.waitForTimeout(1200);
+  const txt = async () => (await page.locator('main').innerText()).replace(/\s+/g, ' ');
+  let t = await txt();
+  const count = (t.match(/([\d,]+)\s+games?/i) || [])[1];
+  console.log('win count text:', count, '|', t.slice(0, 250));
+  check('UI: Carlsen black 2019-2025 player won = 56', count === '56', count);
+  await shot(page, 'p3-carlsen-win');
+  await form.locator('select').nth(1).selectOption('loss');
+  await form.locator('button[type=submit], button:has-text("Search")').first().click();
+  await page.waitForTimeout(1200);
+  t = await txt();
+  const c2 = (t.match(/([\d,]+)\s+games?/i) || [])[1];
+  check('UI: Carlsen black 2019-2025 player lost = 13', c2 === '13', c2);
+  // sort by date, open a game, check preview
+  const rows = page.locator('.game-row, [role=row]');
+  console.log('rows visible', await rows.count());
+  // clear player -> result option "loss" disappears; does the filter silently stay?
+  await form.getByPlaceholder('Name (part of it is enough)').fill('');
+  await form.locator('button[type=submit], button:has-text("Search")').first().click();
+  await page.waitForTimeout(1200);
+  t = await txt();
+  const c3 = (t.match(/([\d,]+)\s+games?/i) || [])[1];
+  const sel = await form.locator('select').nth(1).inputValue();
+  console.log('after clearing player: count', c3, 'result select value', JSON.stringify(sel), 'badges:', (await page.locator('.badge').allInnerTexts()).join(','));
+  // Opponent only
+  await page.evaluate(() => { location.hash = '#/database'; }); await page.waitForTimeout(500);
+  await page.getByRole('button', { name: /Reset|Clear/ }).first().click().catch(() => {});
+  await form.getByPlaceholder('Opponent name').fill('Carlsen');
+  await form.locator('button[type=submit], button:has-text("Search")').first().click();
+  await page.waitForTimeout(1200);
+  t = await txt();
+  const c4 = (t.match(/([\d,]+)\s+games?/i) || [])[1];
+  check('UI: opponent-only filter is not silently ignored', c4 !== '110,441' && c4 !== '110441', `${c4} games shown with only Opponent=Carlsen`);
+  await shot(page, 'p3-opponent-only');
+  // position search from analysis board: Najdorf
+  await page.evaluate(() => { location.hash = '#/analysis'; }); await page.waitForTimeout(500);
+  await page.getByTitle('New game').click().catch(() => {}); await page.waitForTimeout(300);
+  const fenBox = page.locator('input[aria-label=FEN]');
+  await fenBox.fill('rnbqkb1r/1p2pppp/p2p1n2/8/3NP3/2N5/PPP2PPP/R1BQKB1R w KQkq - 0 6'); await fenBox.press('Enter'); await page.waitForTimeout(300);
+  await page.getByTitle('Find games with this position').click();
+  await page.waitForTimeout(2000);
+  t = await txt();
+  const c5 = (t.match(/([\d,]+)\s+games?/i) || [])[1];
+  console.log('Najdorf position search:', c5, '|', t.slice(0, 200));
+  await shot(page, 'p3-position-search');
+  check('no page errors', errors.length === 0, errors.join(' | '));
+  await browser.close();
+})().catch((e) => { console.error('CRASH', e); process.exit(1); });

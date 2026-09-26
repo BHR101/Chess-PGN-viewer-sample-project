@@ -1,0 +1,228 @@
+[Event "Nested variations"]
+[Site "Test"]
+[Date "2024.01.01"]
+[Round "1"]
+[White "Nest, White"]
+[Black "Nest, Black"]
+[Result "1-0"]
+
+1. e4 (1. d4 d5 (1... Nf6 2. c4 (2. Nf3 g6 (2... e6 3. Bg5)) 2... e6) 2. c4) (1. c4) 1... e5 2. Nf3 (2. f4 exf4 (2... d5 3. exd5 (3. Nc3)) 3. Nf3) 2... Nc6 3. Bb5 1-0
+
+[Event "Comments with parens and fake moves"]
+[Site "Test"]
+[Date "2024.01.02"]
+[Round "2"]
+[White "Comment, A"]
+[Black "Comment, B"]
+[Result "1/2-1/2"]
+
+{Pre-game comment (with parentheses) and 1. d4 d5 fake moves} 1. e4 {After 1. e4 (not 1. d4) the game [is] open} e5 {Black replies 1...e5; see (2. Nf3)} 2. Nf3 ; line comment with (parens) and 3. Bb5 a6
+Nc6 {} 3. Bb5 {Brace-open { inside a comment is legal} a6 1/2-1/2
+
+[Event "NAGs galore"]
+[Site "Test"]
+[Date "2024.01.03"]
+[Round "3"]
+[White "Nag, W"]
+[Black "Nag, B"]
+[Result "0-1"]
+
+1. e4! e5? 2. Nf3!! Nc6?? 3. Bc4!? Bc5?! 4. c3 $10 Nf6 $14 $32 5. d4 $146 exd4 $18 6. cxd4 $255 Bb4+ $4 0-1
+
+[Event "Clock and arrows"]
+[Site "lichess.org"]
+[Date "2024.01.04"]
+[Round "4"]
+[White "Clk, W"]
+[Black "Clk, B"]
+[Result "1-0"]
+[TimeControl "180+2"]
+
+1. e4 { [%clk 0:03:00] [%cal Ge2e4,Rd7d5] } 1... d5 { [%clk 0:02:59] [%csl Gd5,Re4] } 2. exd5 { [%eval 0.52] [%clk 0:02:58] } 2... Qxd5 { [%clk 1:02:57.5] [%emt 0:00:03] A normal comment too } 3. Nc3 { [%cal Gc3d5] } 1-0
+
+[Event "?"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "?"]
+[Black "?"]
+[Result "*"]
+
+1. d4 d5 *
+
+1. e4 c5 2. Nf3 d6 *
+
+[White "Only White tag"]
+
+1. c4 e5 1-0
+
+[Event "Promotions"]
+[Site "Test"]
+[Date "2024.01.05"]
+[Round "5"]
+[White "Promo, W"]
+[Black "Promo, B"]
+[Result "*"]
+[SetUp "1"]
+[FEN "3n4/2P1P1k1/8/8/8/8/5p2/K7 w - - 0 50"]
+
+50. cxd8=N f1=Q+ 51. Ka2 Qf6 52. e8=Q Qe7 53. Qxe7+ Kg6 54. Nb7 *
+
+[Event "Promotion without equals"]
+[Site "Test"]
+[Date "2024.01.05"]
+[Round "5b"]
+[White "Promo2, W"]
+[Black "Promo2, B"]
+[Result "*"]
+[SetUp "1"]
+[FEN "8/P6k/8/8/8/8/6Kp/8 w - - 0 1"]
+
+1. a8Q h1N 2. Qb7+ *
+
+[Event "Castling"]
+[Site "Test"]
+[Date "2024.01.06"]
+[Round "6"]
+[White "Castle, W"]
+[Black "Castle, B"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. 0-0 d6 5. d3 Bg4 6. Nc3 Qd7 7. Be3 0-0-0 8. Bxc5 dxc5 *
+
+[Event "En passant"]
+[Site "Test"]
+[Date "2024.01.07"]
+[Round "7"]
+[White "EP, W"]
+[Black "EP, B"]
+[Result "*"]
+
+1. e4 Nf6 2. e5 d5 3. exd6 cxd6 4. d4 Nc6 5. d5 e5 6. dxe6 fxe6 7. a4 Nd4 8. a5 b5 9. axb6 axb6 *
+
+[Event "Scholar mate"]
+[Site "Test"]
+[Date "2024.01.08"]
+[Round "8"]
+[White "Mate, W"]
+[Black "Mate, B"]
+[Result "1-0"]
+
+1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7# 1-0
+
+[Event "Stalemate"]
+[Site "Test"]
+[Date "2024.01.09"]
+[Round "9"]
+[White "Stale, W"]
+[Black "Stale, B"]
+[Result "1/2-1/2"]
+[SetUp "1"]
+[FEN "7k/8/5Q2/8/8/8/8/K7 w - - 0 1"]
+
+1. Qf7 1/2-1/2
+
+[Event "Ended before a move"]
+[Site "Test"]
+[Date "2024.01.10"]
+[Round "10"]
+[White "Forfeit, W"]
+[Black "Forfeit, B"]
+[Result "1-0"]
+
+1-0
+
+[Event "Comment only game"]
+[Site "Test"]
+[Date "2024.01.10"]
+[Round "11"]
+[White "NoMoves, W"]
+[Black "NoMoves, B"]
+[Result "*"]
+
+{Game abandoned before the first move} *
+
+[Event "Weird SAN"]
+[Site "Test"]
+[Date "2024.01.11"]
+[Round "12"]
+[White "Weird, W"]
+[Black "Weird, B"]
+[Result "*"]
+
+1.e4 e5 2.Ng1f3 Nb8c6 3.Bf1b5 a7a6 4.Bb5xc6 d7xc6 5.O-O Qd8d6 6.d2d4+ exd4 7.Nf3xd4!? Bc8d7 8.Nb1c3 0-0-0 *
+
+[Event "Weird SAN 2"]
+[Site "Test"]
+[Date "2024.01.12"]
+[Round "13"]
+[White "Weird2, W"]
+[Black "Weird2, B"]
+[Result "*"]
+
+1. e2-e4 e7-e5 2. Ng1-f3 Nb8-c6 3. Bf1-c4 Ng8-f6 4. Nf3-g5 d7-d5 5. e4xd5 Nf6xd5 6. Ng5xf7 Ke8xf7 *
+
+[Event "Disambiguation"]
+[Site "Test"]
+[Date "2024.01.13"]
+[Round "14"]
+[White "Dis, W"]
+[Black "Dis, B"]
+[Result "*"]
+[SetUp "1"]
+[FEN "8/8/1k6/8/Q6Q/8/8/K6Q w - - 0 1"]
+
+1. Qh4e1 Kc7 2. Qa4b3 Kd8 3. Q1e2 *
+
+[Event "Black to move start"]
+[Site "Test"]
+[Date "2024.01.14"]
+[Round "15"]
+[White "BTM, W"]
+[Black "BTM, B"]
+[Result "*"]
+[SetUp "1"]
+[FEN "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"]
+
+1... c5 2. Nf3 (2. c3 d5) 2... d6 *
+
+[Event "Illegal move mid game"]
+[Site "Test"]
+[Date "2024.01.15"]
+[Round "16"]
+[White "Illegal, W"]
+[Black "Illegal, B"]
+[Result "*"]
+
+1. e4 e5 2. Nf3 Nc6 3. Ke3 Nf6 *
+
+[Event "After illegal"]
+[Site "Test"]
+[Date "2024.01.16"]
+[Round "17"]
+[White "After, W"]
+[Black "After, B"]
+[Result "0-1"]
+
+1. f3 e5 2. g4 Qh4# 0-1
+
+[Event "Escaped \"quotes\" and back\\slash"]
+[Site "Test"]
+[Date "2024.01.17"]
+[Round "18"]
+[White "O'Brien, Seán"]
+[Black "Müller, Jürgen"]
+[Result "1/2-1/2"]
+
+1. e4 e6 1/2-1/2
+
+[Event "Null move"]
+[Site "Test"]
+[Date "2024.01.18"]
+[Round "19"]
+[White "Null, W"]
+[Black "Null, B"]
+[Result "*"]
+
+1. e4 -- 2. d4 Z0 3. c4 *
+

@@ -1,0 +1,5 @@
+out/
+data/twic/
+__pycache__/
+*.sqlite
+*.sqlite-*

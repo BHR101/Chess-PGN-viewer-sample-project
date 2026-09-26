@@ -1,0 +1,9 @@
+[Event "Bad FEN"]
+[White "BadFen, W"]
+[Black "BadFen, B"]
+[Result "*"]
+[SetUp "1"]
+[FEN "4k3/8/8/8/8/8/8/4K2R w X - 0 1"]
+
+1. e4 e5 2. Nf3 *
+

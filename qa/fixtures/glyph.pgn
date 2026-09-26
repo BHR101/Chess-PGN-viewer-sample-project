@@ -1,0 +1,28 @@
+[Event "Glyph test"]
+[White "Glyph, W"]
+[Black "Glyph, B"]
+[Result "*"]
+
+1. e4± e5 2. Nf3 Nc6 *
+
+[Event "Glyph test 2"]
+[White "Glyph2, W"]
+[Black "Glyph2, B"]
+[Result "1-0"]
+
+1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7!# 1-0
+
+[Event "Long comment"]
+[White "LC, W"]
+[Black "LC, B"]
+[Result "*"]
+
+1. e4 {xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [%eval 0.23]} e5 *
+
+[Event "Result tag odd"]
+[White "RQ, W"]
+[Black "RQ, B"]
+[Result "?"]
+
+1. e4 e5
+
