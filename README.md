@@ -26,7 +26,7 @@ keeps the games in a single SQLite file.
 **Database**
 - Streaming, multi-threaded PGN import (UTF-8 or Latin-1, BOM/CRLF tolerant,
   lenient SAN parsing, duplicate detection, error reporting). About
-  **14,000 games/s** for parsing and writing, and **1 million games in 2½
+  **13,700 games/s** for parsing and writing, and **1 million games in 2½
   minutes** including index building on a 4-core machine.
 - Search by player (substring, either colour, opponent, result relative to
   the player), event, site, date range, Elo range, ECO code/range, opening
@@ -178,8 +178,8 @@ skewed opening distribution, 4% annotated):
 
 | Operation | Result |
 |---|---|
-| Import, parse + write | **71 s, 14,100 games/s** |
-| Import, total incl. position-index merge and indexes | **140 s, 7,100 games/s** |
+| Import, parse + write | **73 s, 13,700 games/s** |
+| Import, total incl. position-index merge and indexes | **143 s, 7,000 games/s** |
 | Database size | 2.33 GB (57M indexed positions, about 2.3 KB/game) |
 | Explorer, start position (1M games), uncached / cached | ≈300 ms / 0.3 ms |
 | Explorer after 1.e4 (175k games), uncached | ≈50 ms |
