@@ -45,6 +45,26 @@ export function App() {
     }).catch(() => setOffline(true));
   }, []);
   useEffect(refreshInfo, [refreshInfo]);
+  // While an import runs in the background, poll for progress and refresh stats when it ends.
+  const [importPct, setImportPct] = useState<number | null>(null);
+  useEffect(() => {
+    if (!info?.importing) {
+      setImportPct(null);
+      return;
+    }
+    const t = setInterval(async () => {
+      try {
+        const jobs = await api.jobs();
+        const running = jobs.find((j) => j.status === 'running');
+        const p = running?.progress;
+        setImportPct(p ? (p.phase === 'indexing' ? 100 : Math.round((100 * p.bytesRead) / Math.max(1, p.totalBytes))) : 0);
+        if (!running && !jobs.some((j) => j.status === 'queued')) refreshInfo();
+      } catch {
+        /* server restarting */
+      }
+    }, 1500);
+    return () => clearInterval(t);
+  }, [info?.importing, refreshInfo]);
   useEngineDriver(!!info?.engine.available);
 
   // Load games referenced by the URL.
@@ -144,6 +164,11 @@ export function App() {
         </nav>
         <span className="spacer" />
         {offline && <span className="badge" style={{ color: 'var(--danger)' }}>server offline</span>}
+        {info?.importing && (
+          <button className="btn sm" onClick={() => setDialog('import')} title="Import running — click for details">
+            <span className="spinner" /> Importing{importPct !== null ? ` ${importPct}%` : '…'}
+          </button>
+        )}
         {stats && (
           <span className="header-stats" title={`${stats.positions.toLocaleString()} indexed positions`}>
             {stats.games.toLocaleString()} games · {stats.players.toLocaleString()} players
@@ -170,12 +195,20 @@ export function App() {
       </header>
       <main className="main">
         {route.view === 'database' ? (
-          <DatabaseView params={route.params} gameCount={stats?.games ?? 0} />
+          <DatabaseView params={route.params} gameCount={stats?.games ?? 0} dataVersion={stats?.dataVersion ?? ''} />
         ) : (
           <AnalysisView nativeEngine={!!info?.engine.available} tab={tab} setTab={setTab} />
         )}
       </main>
-      {dialog === 'import' && <ImportDialog onClose={() => setDialog(null)} onDone={refreshInfo} />}
+      {dialog === 'import' && (
+        <ImportDialog
+          onClose={() => {
+            setDialog(null);
+            refreshInfo();
+          }}
+          onDone={refreshInfo}
+        />
+      )}
       {dialog === 'open' && <OpenPgnDialog onClose={() => setDialog(null)} onImport={() => setDialog('import')} />}
       {dialog === 'settings' && <SettingsDialog onClose={() => setDialog(null)} />}
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}

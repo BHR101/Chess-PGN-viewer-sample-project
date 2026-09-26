@@ -24,6 +24,42 @@ export interface ServerOptions {
   logger?: boolean;
   enginePath?: string | null;
   maxEngines?: number;
+  /**
+   * Extra host names accepted in the Host header (besides localhost/loopback
+   * and the bind address). Protects against DNS rebinding.
+   */
+  allowedHosts?: string[];
+}
+
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+function hostName(hostHeader: string): string {
+  // Strip the port (keeping bracketed IPv6 literals intact).
+  const m = /^(\[[^\]]+\]|[^:]+)(?::\d+)?$/.exec(hostHeader.trim().toLowerCase());
+  return m ? m[1] : hostHeader;
+}
+
+/**
+ * Reject cross-site requests (CSRF / cross-site WebSocket hijacking) and
+ * requests for unexpected host names (DNS rebinding). Browsers always send
+ * Origin on cross-origin requests and WebSocket handshakes.
+ */
+export function isRequestAllowed(headers: Record<string, string | string[] | undefined>, bindHost: string, extraHosts: string[] = []): boolean {
+  const host = typeof headers.host === 'string' ? headers.host : '';
+  const name = hostName(host);
+  const openBind = bindHost === '0.0.0.0' || bindHost === '::';
+  if (!openBind && !LOOPBACK.has(name) && name !== bindHost.toLowerCase() && !extraHosts.includes(name)) return false;
+  const origin = typeof headers.origin === 'string' ? headers.origin : undefined;
+  if (origin && origin !== 'null') {
+    try {
+      if (new URL(origin).host.toLowerCase() !== host.toLowerCase()) return false;
+    } catch {
+      return false;
+    }
+  } else if (origin === 'null') {
+    return false;
+  }
+  return true;
 }
 
 const VERSION = '0.1.0';
@@ -87,6 +123,11 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   let activeEngines = 0;
 
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 16 * 1024 * 1024 });
+  app.addHook('onRequest', async (req, reply) => {
+    if (!isRequestAllowed(req.headers, opts.host ?? '127.0.0.1', opts.allowedHosts)) {
+      return reply.code(403).send({ error: 'Cross-origin request rejected' });
+    }
+  });
   await app.register(fastifyWebsocket);
 
   // Raw PGN uploads are streamed straight to disk.
@@ -276,7 +317,7 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   // ---- static web UI
   const webDir = opts.webDir ?? fileURLToPath(new URL('../../web/dist', import.meta.url));
   if (existsSync(webDir)) {
-    await app.register(fastifyStatic, { root: webDir, wildcard: false });
+    await app.register(fastifyStatic, { root: webDir, wildcard: true });
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'Not found' });
       return reply.sendFile('index.html');

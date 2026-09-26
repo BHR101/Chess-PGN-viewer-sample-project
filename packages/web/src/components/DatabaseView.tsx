@@ -479,7 +479,7 @@ function Preview({ row, onOpen }: { row: GameRow; onOpen: (ply?: number) => void
 
 // ---------------------------------------------------------------- view
 
-export function DatabaseView({ params, gameCount }: { params: URLSearchParams; gameCount: number }) {
+export function DatabaseView({ params, gameCount, dataVersion }: { params: URLSearchParams; gameCount: number; dataVersion: string }) {
   const filters = useMemo(() => filtersFromParams(params), [params]);
   const query = useMemo(() => toQuery(filters), [filters]);
   const [selected, setSelected] = useState<GameRow | null>(null);
@@ -518,6 +518,7 @@ export function DatabaseView({ params, gameCount }: { params: URLSearchParams; g
           </a>
         </div>
         <GameTable
+          key={dataVersion}
           query={query}
           selected={selected?.id ?? null}
           onSelect={setSelected}

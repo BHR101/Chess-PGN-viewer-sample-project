@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Position, openingOfPosition } from '@pgnx/core';
 import { api } from '../api';
+import { commentText } from '../state/comments';
 import { positionOf, useGameStore } from '../state/gameStore';
 import { navigate } from '../state/router';
 import { useSettings } from '../state/settings';
@@ -253,25 +254,27 @@ const EVAL_NAGS: Array<[number, string, string]> = [
   [19, '−+', 'Black is winning'],
 ];
 
+/** Split a comment into its human-readable text and embedded [%...] commands. */
+function splitComment(raw: string | undefined): { text: string; commands: string } {
+  const commands = (raw ?? '').match(/\[%[^\]]*\]/g) ?? [];
+  return { text: commentText(raw), commands: commands.join(' ') };
+}
+
 export function AnnotationEditor() {
   const node = useGameStore((s) => s.node);
   useGameStore((s) => s.version);
   const { setComment, toggleNag } = useGameStore.getState();
-  const [text, setText] = useState(node.comment ?? '');
-  useEffect(() => setText(node.comment ?? ''), [node]);
+  const [text, setText] = useState(() => splitComment(node.comment).text);
+  useEffect(() => setText(splitComment(node.comment).text), [node]);
+  const save = () => {
+    const { text: before, commands } = splitComment(node.comment);
+    if (text.trim() !== before) setComment(node, `${text.trim()} ${commands}`);
+  };
+  const textarea = (placeholder: string) => (
+    <textarea className="input" rows={2} placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} onBlur={save} />
+  );
   if (!node.parent) {
-    return (
-      <div className="annotate">
-        <textarea
-          className="input"
-          rows={2}
-          placeholder="Comment before the first move…"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={() => text !== (node.comment ?? '') && setComment(node, text)}
-        />
-      </div>
-    );
+    return <div className="annotate">{textarea('Comment before the first move…')}</div>;
   }
   return (
     <div className="annotate">
@@ -282,14 +285,7 @@ export function AnnotationEditor() {
           </button>
         ))}
       </div>
-      <textarea
-        className="input"
-        rows={2}
-        placeholder={`Comment after ${node.san}…`}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => text !== (node.comment ?? '') && setComment(node, text)}
-      />
+      {textarea(`Comment after ${node.san}…`)}
     </div>
   );
 }

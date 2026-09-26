@@ -195,7 +195,12 @@ export function processGame(raw: string, opts: ProcessOptions): ProcessResult {
       moves: moveBytes,
       movetext,
       tags: hasExtra ? JSON.stringify(extra) : null,
-      fingerprint: fingerprint([white.toLowerCase(), black.toLowerCase(), String(date ?? ''), String(result), startFen ?? ''], moveBytes),
+      // Very short games (forfeits, placeholders) also need event and round to be told apart.
+      fingerprint: fingerprint(
+        [white.toLowerCase(), black.toLowerCase(), String(date ?? ''), String(result), startFen ?? '',
+          ...(played < 20 ? [(h.Event ?? '').toLowerCase(), h.Round ?? ''] : [])],
+        moveBytes,
+      ),
       hashes: indexed === hashes.length ? hashes : hashes.slice(0, indexed),
       next: indexed === next.length ? next : next.slice(0, indexed),
       warning,

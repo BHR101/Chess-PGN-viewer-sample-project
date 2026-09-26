@@ -79,7 +79,7 @@ async function main() {
           'web-dir': { type: 'string' },
         },
       });
-      const { app } = await createServer({ dbPath: resolve(values.db!), webDir: values['web-dir'] });
+      const { app } = await createServer({ dbPath: resolve(values.db!), webDir: values['web-dir'], host: values.host });
       const address = await app.listen({ port: Number(values.port), host: values.host });
       console.log(`PGN Explorer running at ${address.replace('127.0.0.1', 'localhost')}  (database: ${resolve(values.db!)})`);
       const stop = async () => {

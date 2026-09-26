@@ -135,3 +135,32 @@ describe.runIf(findEngine())('native engine', () => {
     expect(lines.some((l) => / depth 8 .* pv /.test(l))).toBe(true);
   });
 });
+
+import { isRequestAllowed } from '../src/server.js';
+
+describe('cross-site protection', () => {
+  it('allows same-origin and non-browser requests', () => {
+    expect(isRequestAllowed({ host: 'localhost:3000' }, '127.0.0.1')).toBe(true);
+    expect(isRequestAllowed({ host: '127.0.0.1:3000', origin: 'http://127.0.0.1:3000' }, '127.0.0.1')).toBe(true);
+    expect(isRequestAllowed({ host: '[::1]:3000', origin: 'http://[::1]:3000' }, '127.0.0.1')).toBe(true);
+  });
+
+  it('rejects cross-origin requests and DNS rebinding', () => {
+    expect(isRequestAllowed({ host: 'localhost:3000', origin: 'https://evil.example' }, '127.0.0.1')).toBe(false);
+    expect(isRequestAllowed({ host: 'localhost:3000', origin: 'null' }, '127.0.0.1')).toBe(false);
+    expect(isRequestAllowed({ host: 'evil.example:3000' }, '127.0.0.1')).toBe(false);
+    // Explicitly exposed servers accept any host name, still same-origin only.
+    expect(isRequestAllowed({ host: 'mybox.lan:3000' }, '0.0.0.0')).toBe(true);
+    expect(isRequestAllowed({ host: 'mybox.lan:3000', origin: 'http://other.lan' }, '0.0.0.0')).toBe(false);
+  });
+
+  it('blocks a cross-site POST through the server', async () => {
+    const res = await server.app.inject({
+      method: 'POST',
+      url: '/api/games',
+      headers: { origin: 'https://evil.example', 'content-type': 'text/plain' },
+      payload: '1. e4 *',
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});

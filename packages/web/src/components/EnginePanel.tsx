@@ -33,7 +33,7 @@ export function EnginePanel({ nativeAvailable }: { nativeAvailable: boolean }) {
         ) : (
           <div className="eval faint">{s.engineOn ? '…' : '—'}</div>
         )}
-        <div className="meta grow">
+        <div className="meta">
           <div className="ellipsis">
             {s.engineOn ? engineName || (error ? 'Engine error' : 'Starting engine…') : 'Engine off'}
             <span className="faint"> · {backend === 'native' ? 'native Stockfish' : 'Stockfish WASM'}</span>
@@ -47,6 +47,7 @@ export function EnginePanel({ nativeAvailable }: { nativeAvailable: boolean }) {
           {s.engineOn && !ready && !error && <div className="faint">Loading…</div>}
           {error && <div style={{ color: 'var(--danger)' }}>{error}</div>}
         </div>
+        <div className="engine-opts">
         <select className="select" style={{ width: 'auto' }} value={s.multiPv} onChange={(e) => s.set('multiPv', +e.target.value)} title="Number of lines">
           {[1, 2, 3, 4, 5].map((n) => (
             <option key={n} value={n}>
@@ -66,6 +67,7 @@ export function EnginePanel({ nativeAvailable }: { nativeAvailable: boolean }) {
           </option>
           <option value="wasm">WASM</option>
         </select>
+        </div>
       </div>
       {s.engineOn && fresh && fresh.lines.length > 0 && (
         <div className="pv-lines">
